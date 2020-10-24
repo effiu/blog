@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="InnoDB存储引擎的B+树索引：  每个索引都是一个B+树，B+树分为多层。所有用户记录都存储在B+树的叶子节点，所有目录记录都存储在非叶子节点。 InnoDB存储引擎会自动为主键建立聚簇索引，其叶子节点包含完整的用户记录。 可以为非主键列建立二级索引，二级索引的叶子节点包含的用户记录由索引列+主键列组成，所以通过二级索引查找用户记录，需要通过回表操作，即通过二级索引确定主键id后，在到聚簇索引">
+<meta property="og:type" content="article">
+<meta property="og:title" content="B+ Tree的使用">
+<meta property="og:url" content="https://www.effiu.cn/2019/07/23/mysql/7_b+_tree_use/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="InnoDB存储引擎的B+树索引：  每个索引都是一个B+树，B+树分为多层。所有用户记录都存储在B+树的叶子节点，所有目录记录都存储在非叶子节点。 InnoDB存储引擎会自动为主键建立聚簇索引，其叶子节点包含完整的用户记录。 可以为非主键列建立二级索引，二级索引的叶子节点包含的用户记录由索引列+主键列组成，所以通过二级索引查找用户记录，需要通过回表操作，即通过二级索引确定主键id后，在到聚簇索引">
+<meta property="og:locale">
+<meta property="article:published_time" content="2019-07-23T07:35:00.000Z">
+<meta property="article:modified_time" content="2020-06-10T16:42:02.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="MySQL">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/07/23/mysql/7_b+_tree_use/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>B+ Tree的使用 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E7%B4%A2%E5%BC%95%E7%9A%84%E4%BB%A3%E4%BB%B7"><span class="nav-number">1.</span> <span class="nav-text">1. 索引的代价</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-B-%E6%A0%91%E7%B4%A2%E5%BC%95%E4%BD%BF%E7%94%A8%E7%9A%84%E6%9D%A1%E4%BB%B6"><span class="nav-number">2.</span> <span class="nav-text">2. B+树索引使用的条件</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E5%85%A8%E5%80%BC%E5%8C%B9%E9%85%8D"><span class="nav-number">2.1.</span> <span class="nav-text">1. 全值匹配</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E5%8C%B9%E9%85%8D%E5%B7%A6%E8%BE%B9%E7%9A%84%E5%88%97"><span class="nav-number">2.2.</span> <span class="nav-text">2. 匹配左边的列</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E5%8C%B9%E9%85%8D%E5%88%97%E5%89%8D%E7%BC%80"><span class="nav-number">2.3.</span> <span class="nav-text">3. 匹配列前缀</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-%E5%8C%B9%E9%85%8D%E8%8C%83%E5%9B%B4%E5%80%BC"><span class="nav-number">2.4.</span> <span class="nav-text">4. 匹配范围值</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#5-%E7%B2%BE%E7%A1%AE%E5%8C%B9%E9%85%8D%E6%9F%90%E4%B8%80%E5%88%97%E5%B9%B6%E8%8C%83%E5%9B%B4%E5%8C%B9%E9%85%8D%E5%8F%A6%E5%A4%96%E4%B8%80%E5%88%97"><span class="nav-number">2.5.</span> <span class="nav-text">5. 精确匹配某一列并范围匹配另外一列</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#6-%E7%94%A8%E4%BA%8E%E6%8E%92%E5%BA%8F"><span class="nav-number">2.6.</span> <span class="nav-text">6. 用于排序</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">2.6.1.</span> <span class="nav-text">注意事项</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#%E4%B8%8D%E8%83%BD%E4%BD%BF%E7%94%A8%E7%B4%A2%E5%BC%95%E7%9A%84%E5%87%A0%E7%A7%8D%E6%83%85%E5%86%B5"><span class="nav-number">2.6.2.</span> <span class="nav-text">不能使用索引的几种情况</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#7-%E7%94%A8%E4%BA%8E%E5%88%86%E7%BB%84"><span class="nav-number">2.7.</span> <span class="nav-text">7. 用于分组</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E5%9B%9E%E8%A1%A8%E7%9A%84%E4%BB%A3%E4%BB%B7"><span class="nav-number">3.</span> <span class="nav-text">3. 回表的代价</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#%E8%A6%86%E7%9B%96%E7%B4%A2%E5%BC%95"><span class="nav-number">3.1.</span> <span class="nav-text">覆盖索引</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E5%A6%82%E4%BD%95%E9%80%89%E6%8B%A9%E7%B4%A2%E5%BC%95"><span class="nav-number">4.</span> <span class="nav-text">4. 如何选择索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#5-%E6%80%BB%E7%BB%93"><span class="nav-number">5.</span> <span class="nav-text">5. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/07/23/mysql/7_b+_tree_use/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          B+ Tree的使用
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-07-23 15:35 15:35:00" itemprop="dateCreated datePublished" datetime="2019-07-23T15:35:00+08:00">2019-07-23 15:35</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-06-11 00:42 00:42:02" itemprop="dateModified" datetime="2020-06-11T00:42:02+08:00">2020-06-11 00:42</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/mysql/" itemprop="url" rel="index"><span itemprop="name">mysql</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/07/23/mysql/7_b+_tree_use/" class="post-meta-item leancloud_visitors" data-flag-title="B+ Tree的使用" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/07/23/mysql/7_b+_tree_use/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/07/23/mysql/7_b+_tree_use/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><code>InnoDB</code>存储引擎的<strong>B+树</strong>索引：</p>
+<ul>
+<li>每个索引都是一个<strong>B+树</strong>，<strong>B+树</strong>分为多层。所有用户记录都存储在<strong>B+树</strong>的叶子节点，所有目录记录都存储在非叶子节点。</li>
+<li><code>InnoDB</code>存储引擎会自动为主键建立<strong>聚簇索引</strong>，其叶子节点包含完整的用户记录。</li>
+<li>可以为非主键列建立二级索引，二级索引的叶子节点包含的用户记录由<strong>索引列+主键列</strong>组成，所以通过二级索引查找用户记录，需要通过<strong>回表</strong>操作，即通过二级索引确定主键id后，在到聚簇索引中查找完整的用户记录。</li>
+<li><strong>B+树</strong>中每层节点都是按照索引列大小排序组成的双向链表，每个页内的记录(用户记录或者目录记录)都是按照索引列值从小到大顺序形成的单链表。</li>
+<li>通过索引查找记录是从<strong>B+树</strong>的根节点开始，一层一层向下搜索。由于每个页面都按照索引列的值建立了<code>Page Directory</code>（页目录），所以在这些页面中的查找非常快。</li>
+</ul>
+<p>下面说明如何使用<strong>B+树</strong>。</p>
+<a id="more"></a>
+
+<h4 id="1-索引的代价"><a href="#1-索引的代价" class="headerlink" title="1. 索引的代价"></a>1. 索引的代价</h4><ul>
+<li><p>空间代价，每建立一个索引，都要建立一个<strong>B+树</strong>，每棵<strong>B+树</strong>的每个节点都是数据页，每页默认占<code>16KB</code>大小。</p>
+</li>
+<li><p>时间代价，每次对表进行增、删、改时，都需要去修改各个<strong>B+树</strong>索引。例如，记录位移，页面分裂、页面回收等操作。</p>
+<ul>
+<li>页是按照索引值从小到大的双向链表</li>
+<li>数据页内是按照索引值从小到大的单链表</li>
+</ul>
+</li>
+</ul>
+<h4 id="2-B-树索引使用的条件"><a href="#2-B-树索引使用的条件" class="headerlink" title="2. B+树索引使用的条件"></a>2. B+树索引使用的条件</h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">CREATE TABLE person_info(</span><br><span class="line">    id INT NOT NULL auto_increment,</span><br><span class="line">    name VARCHAR(100) NOT NULL,</span><br><span class="line">    birthday DATE NOT NULL,</span><br><span class="line">    phone_number CHAR(11) NOT NULL,</span><br><span class="line">    country varchar(100) NOT NULL,</span><br><span class="line">    PRIMARY KEY (id),</span><br><span class="line">    KEY idx_name_birthday_phone_number (name, birthday, phone_number)</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<h5 id="1-全值匹配"><a href="#1-全值匹配" class="headerlink" title="1. 全值匹配"></a>1. 全值匹配</h5><p>搜索条件中的列与索引列一致，称为全值匹配。当索引列是联合索引时(<code>idx_name_birthday_phone_number</code>)：<a name='sort'></a></p>
+<ul>
+<li>先按照<code>name</code>列的值进行排序。</li>
+<li>如果<code>name</code>列的值相同，则按照<code>birthday</code>列的值进行排序。</li>
+<li>如果<code>birthday</code>列的值也相同，则按照<code>phone_number</code>的值进行排序。</li>
+</ul>
+<p><font color='red'><code>Where</code>子句内的搜索条件顺序对查询结果没有影响</font>，因为<code>MySQL</code>中有查询优化器。</p>
+<h5 id="2-匹配左边的列"><a href="#2-匹配左边的列" class="headerlink" title="2. 匹配左边的列"></a>2. 匹配左边的列</h5><p>在搜索语句中也可以不包含全部联合索引中的列，只包含左侧的。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &#x3D; &#39;Ashburn&#39;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &#x3D; &#39;Ashburn&#39; AND birthday &#x3D; &#39;1990-09-27&#39;;</span><br></pre></td></tr></table></figure>
+
+<p><strong>B+树</strong>的记录的<a href='#sort'>排序规则</a>。当非匹配最左原则时，则无法使用索引。</p>
+<h5 id="3-匹配列前缀"><a href="#3-匹配列前缀" class="headerlink" title="3. 匹配列前缀"></a>3. 匹配列前缀</h5><p>当字符串列为索引时，其是按照字符串比较规则排序的，如下：</p>
+<ul>
+<li>先比较字符串的第一个字符，第一个字符小的那个字符串就比较小。</li>
+<li>如果两个字符串的第一个字符相同，那就再比较第二个字符，第二个字符比较小的那个字符串就比较小。</li>
+<li>如果两个字符串的第二个字符也相同，那就接着比较第三个字符，依此类推。</li>
+</ul>
+<p>所以有序的字符串特点如下：</p>
+<ul>
+<li>先按照字符串第一个字符排序</li>
+<li>若第一个相同，则按照第二个字符串排序</li>
+<li>以此类推。</li>
+</ul>
+<p>所以字符串的前n各字符是有序的，所以对于字符串类型索引来说，值匹配其前缀也可以快速定位记录。<a name='prefixMatching'></a>如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name LIKE &#39;As%&#39;;</span><br></pre></td></tr></table></figure>
+
+<p>以下SQL无法使用到索引：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name LIKE &#39;%As%&#39;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name LIKE &#39;%As&#39;;</span><br></pre></td></tr></table></figure>
+
+<h5 id="4-匹配范围值"><a href="#4-匹配范围值" class="headerlink" title="4. 匹配范围值"></a>4. 匹配范围值</h5><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39;;</span><br></pre></td></tr></table></figure>
+
+<p><strong>B+树</strong>中的记录页与数据页是按照<code>name</code>排列的，所有上述插入过程如下:</p>
+<ul>
+<li>找到<code>name</code>值为<code>Asa</code>的记录</li>
+<li>找到<code>name</code>值为<code>barlow</code>的记录</li>
+<li>由于所有数据页是由双向链表组成，数据页内的记录是由单链表组成，所以可以得到符合条件的数据的主键集合</li>
+<li>根据主键值到<strong>聚簇索引</strong>中<strong>回表</strong>找到完整记录</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39; AND birthday &gt; &#39;1980-01-01&#39;;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL中，只有<code>name</code>列才能用到<strong>B+树</strong>索引</p>
+<ul>
+<li>通过条件<code>name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39;</code>来对<code>name</code>进行范围查找，<code>name</code>列的索引会起作用</li>
+<li>对<code>name</code>查找到的集合继续通过<code>birthday &gt; &#39;1980-01-01&#39;</code>条件过滤</li>
+<li>回表</li>
+</ul>
+<p>下面的SQL，会在上述过程的基础上(回表操作后，继续过滤)</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39; AND birthday &gt; &#39;1980-01-01&#39; AND country &gt; &#39;China&#39;</span><br></pre></td></tr></table></figure>
+
+<h5 id="5-精确匹配某一列并范围匹配另外一列"><a href="#5-精确匹配某一列并范围匹配另外一列" class="headerlink" title="5. 精确匹配某一列并范围匹配另外一列"></a>5. 精确匹配某一列并范围匹配另外一列</h5><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &#x3D; &#39;Ashburn&#39; AND birthday &gt; &#39;1980-01-01&#39; AND birthday &lt; &#39;2000-12-31&#39; AND phone_number &gt; &#39;15100000000&#39;;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL，因为左侧列是索引列，联合索引会起作用：</p>
+<ul>
+<li><code>name</code>是索引列，对起进行精确查找，使用<strong>B+树</strong></li>
+<li>由于<code>name</code>是精确查找，所以结果集中<code>name</code>值是相同的，而，<strong>B+树</strong>中，当<code>name</code>相同时时按照<code>birthday</code>大小排序的，所以<code>birthday &gt; &#39;1980-01-01&#39; AND birthday &lt; &#39;2000-12-31&#39;</code>可以使用<strong>B+树</strong></li>
+<li>由于<code>birthday</code>条件是范围查找，所以通过<code>birthday</code>确定的结果集值可能不同，所以<code>phone_number</code>无法使用<strong>B+树</strong>索引，只能遍历上一步查询的到的记录</li>
+</ul>
+<h5 id="6-用于排序"><a href="#6-用于排序" class="headerlink" title="6. 用于排序"></a>6. 用于排序</h5><p>当我们在查询语句中使用<code>Order By</code>子句按照某种规则排序时，一般是把记录加载到内存中，然后利用一些排序算法，例如快速排序、归并排序等等再内存中进行排序，当查询结果集太大以至于不能再内存中排序的话，还可能会暂时借助磁盘的空间存放中间结果，排序操作完成后再把排序后的结果集返回到客户端，<code>MySQL</code>中，把这种再内存或者磁盘上进行排序的方式称为<strong>文件排序</strong>（<code>fileSort</code>），效率比较低。</p>
+<p>当<code>ORDER BY</code>子句里使用到了索引列，就会省去在内存或文件中排序的步骤，例如：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info ORDER BY name, birthday, phone_number LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<p>上述<code>Order By</code>子句是先按照<code>name</code>排序，若<code>name</code>相同，则按照<code>birthday</code>排序，若<code>birthday</code>相同，则按照<code>phone_number</code>排序，其与联合索引规则一致，所以会直接从索引中提取数据，然后进行回表操作。</p>
+<h6 id="注意事项"><a href="#注意事项" class="headerlink" title="注意事项"></a>注意事项</h6><p>要使用联合索引进行排序的话，<code>Order By</code>子句后的列的顺序必须按照索引列的顺序给出，否则不能使用<strong>B+树</strong>。匹配最左原则的<code>Order By</code>子句也可以使用<strong>B+树</strong>索引。下述SQL，相当于联合索引左侧列为常量(<code>name</code>值确定)，同样可以使用后面的列进行排序</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &#x3D; &#39;A&#39; ORDER BY birthday, phone_number LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<h6 id="不能使用索引的几种情况"><a href="#不能使用索引的几种情况" class="headerlink" title="不能使用索引的几种情况"></a>不能使用索引的几种情况</h6><ol>
+<li><p><code>ASC</code>、<code>DESC</code>混用</p>
+<p>对于使用联合索引的场景，要求各个排序顺序是一致的，<code>ASC</code>或者<code>DESC</code>规则排序，不能一起使用。</p>
+<ul>
+<li><p>当排序列顺序一致时</p>
+<ul>
+<li><code>order by name ,birthday limit 10</code>，从索引左侧向右读取10行记录</li>
+<li><code>order by name desc, birthday desc limit 10</code>，从索引右侧向左读取10行记录</li>
+</ul>
+</li>
+<li><p>当排序顺序不一致时，<code>order by name, birthday desc limit 10</code></p>
+<ul>
+<li>先从索引左侧确定<code>name</code>最小列的值，然后找到<code>name</code>列等于该值的所有记录，然后从记录右侧开始向左找10条记录</li>
+<li>若<code>name</code>列等于最小值的记录不足10条，则继续向右找<code>name</code>第二小的记录</li>
+<li>重复上述过程，直到找到10条记录</li>
+</ul>
+<p>上述过程没有高效使用索引，不如直接使用文件排序</p>
+</li>
+</ul>
+</li>
+<li><p><code>Where</code>子句中出现非排序使用到的索引列</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE country &#x3D; &#39;China&#39; ORDER BY name LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL，搜索列(<code>Where</code>子句)<code>country</code>非<code>Order By</code>子句使用的列，所以没有用到索引，仅仅是把<code>country = &#39;China&#39;</code>的记录取出来再进行排序。</p>
+</li>
+<li><p>排序列包含非同一个索引的列</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info ORDER BY name, country LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL中，使用联合索引<code>name</code>列确定的结果集中<code>country</code>是无序的</p>
+</li>
+<li><p>排序列使用的复杂的表达式</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info ORDER BY UPPER(name) LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL中，索引列的排序规则与<code>UPPER(name)</code>不一致</p>
+</li>
+</ol>
+<h5 id="7-用于分组"><a href="#7-用于分组" class="headerlink" title="7. 用于分组"></a>7. 用于分组</h5><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT name, birthday, phone_number, COUNT(*) FROM person_info GROUP BY name, birthday, phone_number</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL相当于做了3次分组操作</p>
+<ul>
+<li>先把记录按照<code>name</code>值进行分组，所有<code>name</code>值相同的记录分为一组</li>
+<li>将每个<code>name</code>值相同的分组里的记录，按照<code>birthday</code>值进行分组</li>
+<li>再继续将<code>name</code>、<code>birthday</code>相同的记录按照<code>phone_number</code>分组</li>
+</ul>
+<p>其过程与<strong>B+树</strong>索引顺序一致，可以直接使用<strong>B+树</strong>索引进行分组。</p>
+<ul>
+<li>分组列顺序与索引顺序一致</li>
+<li>可以使用索引列中左边的列进行分组</li>
+</ul>
+<ul>
+<li><input disabled="" type="checkbox"> <code>Group By</code>子句中含有非索引列时，索引不起作用</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT name, birthday, phone_number, COUNT(*) FROM person_info GROUP BY name, birthday, phone_number, country;</span><br></pre></td></tr></table></figure>
+
+<p><code>Group By</code>子句中包含<code>country</code>，若要使用联合索引，需要先去二级联合索引中查询数据，然后根据结果集去聚簇索引中回表查找，然后分组，性能或者效率非常低。</p>
+<h4 id="3-回表的代价"><a href="#3-回表的代价" class="headerlink" title="3. 回表的代价"></a>3. 回表的代价</h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39;;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL使用<code>idx_name_birthday_phone_number</code>索引，进行查询时分为以下两个步骤：</p>
+<ul>
+<li>使用联合索引中的<code>name</code>确定记录范围</li>
+<li>由于联合索引对于的<strong>B+树</strong>用户记录中只包含部分字段，而查询列表是<code>*</code>，说明需要再根据联合索引<strong>B+树</strong>得到的主键id，到聚簇索引对应的<strong>B+树</strong>中<strong>回表</strong></li>
+</ul>
+<p>第一步中联合索引对应的<strong>B+树</strong>记录时连续分布几种在<strong>数据页</strong>中的，所以可以很快从记录数据的磁盘中读取出来，这种读取方式称为<code>顺序I/O</code>。然后第二步，由于第一步得到的结果集的主键id在聚簇索引中是非连续的（聚簇索引中时根据主键id排序的，与联合索引<strong>B+树</strong>排序方式不同），所以结果是分布在聚簇索引的不同页中，因而需要访问更多的数据页，这种读取方式称为<code>随机I/O</code>。<font color='red'>顺序I/O比随机I/O性能高很多</font>。</p>
+<p>需要回表的记录越多，使用二级索引的性能越低或者代价越高，有时甚至不如全表扫描。例如<code>Asa</code>~<code>Barlow</code>之间的记录占全部记录90%以上，那么全表扫描性能更好。实际使用中，<code>InnoDB</code>的查询优化器会选择采用全表扫描还是二级索引+回表，查询优化器会事先对表中的记录做统计，然后利用统计数据根据查询条件计算需要回表的记录数，一般需要回表的记录越多，越倾向于使用全表扫描。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39; LIMIT 10;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL，会使用<strong>二级索引+回表</strong>，<code>LIMIT 10</code>说明回表id很少。</p>
+<p>有排序或者分组需求的查询，也判断采用<strong>二级索引+回表</strong>，还是全表扫描。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info ORDER BY name, birthday, phone_number;</span><br></pre></td></tr></table></figure>
+
+<h5 id="覆盖索引"><a href="#覆盖索引" class="headerlink" title="覆盖索引"></a>覆盖索引</h5><p>实际使用中，应该尽量避免<strong>回表</strong>带来的性能损耗，尽量保证查询列表里只包含索引列。例如：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT name, birthday, phone_number FROM person_info WHERE name &gt; &#39;Asa&#39; AND name &lt; &#39;Barlow&#39;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL中，查询列表均是联合索引内的数据，此时不需要到聚簇索引中查找，这种只需要用到索引值的查询方式称为<strong>索引覆盖</strong>。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT name, birthday, phone_number  FROM person_info ORDER BY name, birthday, phone_number;</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL中，没有<code>LIMIT</code>子句，但是采用了<strong>覆盖索引</strong>，不需要<strong>回表</strong>操作，因为查询列表中没有索引列之外的列。</p>
+<h4 id="4-如何选择索引"><a href="#4-如何选择索引" class="headerlink" title="4. 如何选择索引"></a>4. 如何选择索引</h4><ol>
+<li><p>只为用于搜索、排序或分组的列创建索引</p>
+</li>
+<li><p>考虑列的基数，为那些列的基数大的列建立索引，为基数太小列的建立索引效果可能不好。</p>
+<p><strong>列的基数</strong>指某一列中不重复数据的个数，其直接影响我们是否能有效利用索引。基数为<code>1</code>，即所有列中的值都一样，此时建立索引的重复值就会很多，使用索引的意义不大。</p>
+</li>
+<li><p>索引列的类型尽量小</p>
+<p>类型大小指的是数据范围的大小，例如<code>TINYINT</code>、<code>MEDIUMINT</code>、<code>INT</code>、<code>BIGINT</code>占用的空间依次递增，表示的数据范围也是依次递增。当我们对某个整数列建立的索引的话，在表示的整数范围允许的情况下，尽量让索引列使用较小的类型，是因为：</p>
+<ul>
+<li>数据类型越小，在查询时进行的比较操作越快</li>
+<li>数据了些越小，索引占用的存储空间越小，一个数据页内占用更多的记录，可以减少磁盘I/O带来的性能损耗，也意味着可以把更多的数据页缓存到内存中，加快读写效率</li>
+</ul>
+</li>
+<li><p>索引字符串值的前缀</p>
+<p>上文说到，<code>MySQL</code>中使用<a href='#prefixMatching'>匹配前缀</a>的方式也可以使用索引，那么当需要索引的列数据太长时，会有以下两个问题：</p>
+<ul>
+<li><strong>B+树</strong>索引中记录需要把该列完整的字符串存储起来，而且字符串越长，索引中占用的存储空间越大</li>
+<li><strong>B+树</strong>索引中索引列越长，比较时占用更多的存储空间</li>
+</ul>
+<p>所以，<code>MySQL</code>支持对字符串前几个字符进行索引，这样虽然不能精确定位记录的位置，然后根据前缀记录相同的主键值回表查询完整的字符串值。这样<strong>B+树</strong>中存储的字符串前几个字符，既节约空间，有减少字符串的比较时间。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">CREATE TABLE person_info(</span><br><span class="line">    name VARCHAR(100) NOT NULL,</span><br><span class="line">    birthday DATE NOT NULL,</span><br><span class="line">    phone_number CHAR(11) NOT NULL,</span><br><span class="line">    country varchar(100) NOT NULL,</span><br><span class="line">    KEY idx_name_birthday_phone_number (name(10), birthday, phone_number)</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<p><code>name(10)</code>，<strong>B+树</strong>索引中只保留前10个字符的编码。</p>
+<p>使用索引列前缀的方式无法支持使用索引排序，上述联合索引中<code>name</code>列是前缀索引，不支持对前缀相同，后续字符不同的记录进行排序</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SELECT * FROM person_info ORDER BY name LIMIT 10;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>让索引列在比较表达式中单独出现</p>
+<p>下面SQL是有区别的（col列有索引）:</p>
+<ul>
+<li><code>Where col * 2 &lt; 4</code></li>
+<li><code>Where col &lt; 4/2</code></li>
+</ul>
+<p>第一个<code>Where</code>子句中<code>col</code>列并不是单独列的形式出现的，存储引擎会依次遍历所有的记录，无法使用到索引</p>
+<p>第二个<code>Where</code>子句中<code>col</code>是单独列的形式出现的，可以直接使用<strong>B+树</strong>索引</p>
+</li>
+<li><p>主键插入顺序</p>
+<p><code>InnoDB</code>引擎中，表中的数据实际上是存储到聚簇索引的叶子节点中，数据页是按照主键值从小到大顺序进行排序的，插入数据的记录主键值大小也会影响插入效率。若主键值忽大忽小，那么我们插入数据时，可能会发生<strong>页分裂</strong>和记录位移，这就意味着性能损耗。所以建议：主键：<code>AUTO_INCREMENT</code>，让存储引擎自己为表生成主键。</p>
+</li>
+<li><p>冗余和重复索引</p>
+<p>避免对一个列创建多个索引。</p>
+</li>
+</ol>
+<h4 id="5-总结"><a href="#5-总结" class="headerlink" title="5. 总结"></a>5. 总结</h4><ol>
+<li><strong>B+树</strong>索引在空间和时间上都有代价</li>
+<li><strong>B+树</strong>索引使用范围：<ul>
+<li>全值匹配</li>
+<li>匹配左边的列</li>
+<li>匹配范围值</li>
+<li>精确匹配某一列并范围匹配另外一列</li>
+<li>用于排序</li>
+<li>用于分组</li>
+</ul>
+</li>
+<li><strong>B+树</strong>注意事项：<ul>
+<li>只为用于搜索、排序或分组的列创建索引</li>
+<li>为列的基数大的列创建索引</li>
+<li>索引列的类型尽量小</li>
+<li>可以只对字符串值的前缀建立索引</li>
+<li>只有索引列在比较表达式中单独出现才可以适用索引</li>
+<li>为了尽可能少的让<code>聚簇索引</code>发生页面分裂和记录移位的情况，建议让主键拥有<code>AUTO_INCREMENT</code>属性。</li>
+<li>定位并删除表中的重复和冗余索引</li>
+<li>尽量使用<code>覆盖索引</code>进行查询，避免<code>回表</code>带来的性能损耗。</li>
+</ul>
+</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/MySQL/" rel="tag"># MySQL</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/23/essay/git_cmd/" rel="prev" title="git 命令">
+      <i class="fa fa-chevron-left"></i> git 命令
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/26/mysql/8_single_table_access_method/" rel="next" title="单表访问方法">
+      单表访问方法 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

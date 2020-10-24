@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="1. volatile内存语义 volatile语义是把对volatile变量的单个读&#x2F;写，看成是使用同一个锁对单个读&#x2F;写操作做了同步。  12345678910111213141516public class VolatileFeaturesExample &amp;#123;	&#x2F;&#x2F; 使用volatile声明64位的long变量    volatile long v1 &#x3D; 0L;	&#x2F;&#x2F; 单个volati">
+<meta property="og:type" content="article">
+<meta property="og:title" content="volatile内存语义">
+<meta property="og:url" content="https://www.effiu.cn/2019/04/24/concurrent/chapter3/3.4_volatile/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="1. volatile内存语义 volatile语义是把对volatile变量的单个读&#x2F;写，看成是使用同一个锁对单个读&#x2F;写操作做了同步。  12345678910111213141516public class VolatileFeaturesExample &amp;#123;	&#x2F;&#x2F; 使用volatile声明64位的long变量    volatile long v1 &#x3D; 0L;	&#x2F;&#x2F; 单个volati">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/15.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/16.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/17.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/18.jpg">
+<meta property="article:published_time" content="2019-04-24T14:53:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/15.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/04/24/concurrent/chapter3/3.4_volatile/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>volatile内存语义 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-volatile%E5%86%85%E5%AD%98%E8%AF%AD%E4%B9%89"><span class="nav-number">1.</span> <span class="nav-text">1. volatile内存语义</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-volatile-%E5%86%99-%E8%AF%BB%E5%BB%BA%E7%AB%8B%E7%9A%84-happens-before-%E5%85%B3%E7%B3%BB"><span class="nav-number">2.</span> <span class="nav-text">2. volatile 写 - 读建立的 happens-before 关系</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-volatile-%E5%86%99-%E8%AF%BB%E5%86%85%E5%AD%98%E8%AF%AD%E4%B9%89"><span class="nav-number">3.</span> <span class="nav-text">3. volatile 写-读内存语义</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-volatile%E5%86%85%E5%AD%98%E8%AF%AD%E4%B9%89%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">4.</span> <span class="nav-text">4. volatile内存语义的实现</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#5-volatile%E5%86%85%E5%AD%98%E8%AF%AD%E4%B9%89%E5%A2%9E%E5%BC%BA"><span class="nav-number">5.</span> <span class="nav-text">5. volatile内存语义增强</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/04/24/concurrent/chapter3/3.4_volatile/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          volatile内存语义
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-04-24 22:53 22:53:00" itemprop="dateCreated datePublished" datetime="2019-04-24T22:53:00+08:00">2019-04-24 22:53</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/04/24/concurrent/chapter3/3.4_volatile/" class="post-meta-item leancloud_visitors" data-flag-title="volatile内存语义" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/04/24/concurrent/chapter3/3.4_volatile/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/04/24/concurrent/chapter3/3.4_volatile/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h6 id="1-volatile内存语义"><a href="#1-volatile内存语义" class="headerlink" title="1. volatile内存语义"></a>1. <code>volatile</code>内存语义</h6><blockquote>
+<p><code>volatile</code>语义是把对<code>volatile</code>变量的单个读/写，看成是使用同一个锁对单个读/写操作做了同步。</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">VolatileFeaturesExample</span> </span>&#123;</span><br><span class="line">	<span class="comment">// 使用volatile声明64位的long变量</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">long</span> v1 = <span class="number">0L</span>;</span><br><span class="line">	<span class="comment">// 单个volatile变量的写</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">set</span><span class="params">(<span class="keyword">long</span> l)</span> </span>&#123;</span><br><span class="line">        v1 = l;</span><br><span class="line">    &#125;</span><br><span class="line">	<span class="comment">// 复合(多个)volatile变量的读/写</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">getAndIncrement</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        v1++;</span><br><span class="line">    &#125;</span><br><span class="line">	<span class="comment">// 单个volatile变量的读</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">long</span> <span class="title">get</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> v1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">VolatileFeaturesExample1</span> </span>&#123;</span><br><span class="line">	<span class="comment">// 64位的long普通变量</span></span><br><span class="line">    <span class="keyword">long</span> v1 = <span class="number">0L</span>;</span><br><span class="line">	<span class="comment">// 单个普通变量的写用同一个锁同步</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">set</span><span class="params">(<span class="keyword">long</span> l)</span> </span>&#123;</span><br><span class="line">        v1 = l;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">getAndIncrment</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 调用已同步的读方法</span></span><br><span class="line">        <span class="keyword">long</span> tmp = get();</span><br><span class="line">        <span class="comment">// 普通的写操作</span></span><br><span class="line">        tmp += <span class="number">1</span>;</span><br><span class="line">        <span class="comment">// 调用已同步的写操作</span></span><br><span class="line">        set(tmp);</span><br><span class="line">    &#125;</span><br><span class="line">	<span class="comment">// 对单个普通变量的读操作使用同一个锁同步</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">synchronized</span> <span class="keyword">long</span> <span class="title">get</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> v1;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>以上两个类的效果一样。 一个<code>volatile</code>变量的单个读/写操作，与一个普通变量的读/写操作都是使用同一个锁来同步，其执行效果相同。</p>
+</blockquote>
+<blockquote>
+<p>锁的<code>happens-before</code>规则保证释放锁和获取锁两个线程之间的内存可见性，对于<code>volatile</code>变量来说，对于一个<code>volatile</code>的读，总是能看到(任意线程)对这个<code>volatile</code>变量的写操作。</p>
+</blockquote>
+<blockquote>
+<p>锁的语义决定了临界区代码的执行具有原子性。如果是多个<code>volatile</code>操作或者类似于<code>volatile++</code>的复合操作，这些操作不具有原子性。<code>volatile++</code>是先读后写的复合操作。**<code>volatile</code>变量具有以下特性:**</p>
+</blockquote>
+<ul>
+<li>可见性。对一个<code>volatile</code>变量的读，总是能看到(任意线程)对这个<code>volatile</code>变量最后的写入</li>
+<li>原子性。对任意单个<code>volatile</code>变量的读/写操作具有原子性，但是类似于<code>volatile++</code>的复合操作不具有原子性</li>
+</ul>
+<h6 id="2-volatile-写-读建立的-happens-before-关系"><a href="#2-volatile-写-读建立的-happens-before-关系" class="headerlink" title="2. volatile 写 - 读建立的 happens-before 关系"></a>2. <code>volatile</code> 写 - 读建立的 <code>happens-before</code> 关系</h6><blockquote>
+<p><code>volatile</code>对内存可见性的影响比<code>volatile</code>自身的特性更重要。<code>volatile</code>变量的写 - 读可以实现线程之间的通信。<code>volatile</code>的写 - 读与锁的释放 - 获取有相同的内存语义。见下例：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">VolatileExample</span> </span>&#123;    </span><br><span class="line">    <span class="keyword">int</span> a = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">boolean</span> flag = <span class="keyword">false</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">writer</span><span class="params">()</span></span>&#123;</span><br><span class="line">        a = <span class="number">1</span>;          <span class="comment">// 1</span></span><br><span class="line">        flag = <span class="keyword">true</span>;    <span class="comment">// 2</span></span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">reader</span><span class="params">()</span></span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (flag)&#123;      <span class="comment">// 3</span></span><br><span class="line">            <span class="keyword">int</span> i = a;  <span class="comment">// 4</span></span><br><span class="line">            <span class="comment">// ······</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>上例中，假设线程A执行<code>writer()</code>之后，线程B执行<code>reader()</code>，根据<code>happens-before</code>规则得到如下几点:</p>
+</blockquote>
+<ul>
+<li>根据程序次序规则，1<code>happens-before</code>2，3<code>happens-before</code>4</li>
+<li>根据<code>volatile</code>规则，2<code>happens-before</code>3</li>
+<li>根据<code>happens-before</code>规则的传递性，2<code>happens-before</code>3</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/15.jpg" alt="happens-before"></p>
+<h6 id="3-volatile-写-读内存语义"><a href="#3-volatile-写-读内存语义" class="headerlink" title="3. volatile 写-读内存语义"></a>3. <code>volatile</code> 写-读内存语义</h6><blockquote>
+<p><code>volatile</code>内存语义: </p>
+</blockquote>
+<ul>
+<li>当写一个<code>volatile</code>变量时，JMM会把该线程对应的本地内存中的共享变量值刷新到主内存。</li>
+<li>当读一个<code>volatile</code>变量时，JMM会把该线程对应的本地内存置为无效，线程接下来会从主内存中读取共享变量。</li>
+</ul>
+<blockquote>
+<p>以实例程序<code>VolatileExample</code>为例，<code>volatile</code>写和<code>volatile</code>读综合起来看，线程B读一个<code>volatile</code>变量后，写线程A在写这个<code>volatile</code>变量<strong>之前所有可见的共享变量的值</strong>都将立即变得对读线程B可见。</p>
+</blockquote>
+<ul>
+<li>线程A写一个<code>volatile</code>变量，实质上是线程A向接下来将要读这个<code>volatile</code>变量的某个线程发出了（其对共享变量所做修改的）消息</li>
+<li>线程B读一个<code>volatile</code>消息，实质上是线程B接收了之前某个线程发出的（在写这个<code>volatile</code>变量之前对共享变量所做的修改的）消息</li>
+<li>线程A写一个<code>volatile</code>变量，随后线程B读这个<code>volatile</code>变量，这个过程实际上是线程A通过主内存向线程B发送消息</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/16.jpg" alt="共享变量状态"></p>
+<h6 id="4-volatile内存语义的实现"><a href="#4-volatile内存语义的实现" class="headerlink" title="4. volatile内存语义的实现"></a>4. <code>volatile</code>内存语义的实现</h6><blockquote>
+<p>重排序分为编译器排序和处理器排序，为了实现<code>volatile</code>内存语义JMM会分别限制这两种类型的重排序类型。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/17.jpg" alt="volatile重排序规则表"></p>
+<blockquote>
+<p>可得出以下结论:</p>
+</blockquote>
+<ul>
+<li><p>第二个操作是<code>volatile</code>写时，不管第一个操作是什么，都不能重排序。确保<code>volatile</code>写之前的操作不会被编译器重排序到<code>volatile</code>写之后</p>
+</li>
+<li><p>第一个操作是<code>volatile</code>读时，不管第二个操作是什么，都不能重排序。确保<code>volatile</code>读之前的操作不会被编译器重排序到<code>volatile</code>读之前</p>
+</li>
+<li><p>第一个操作是<code>volatile</code>写，第二个操作是<code>volatile</code>读时，不能重排序</p>
+</li>
+</ul>
+<blockquote>
+<p>为了实现<code>volatile</code>内存语义，编译器在生成字节码时，会在指令序列中插入内存屏障禁止特定类型的处理器重排序。</p>
+</blockquote>
+<ul>
+<li>在每个<code>volatile</code>写操作前面插入<code>StoreStore</code>屏障</li>
+<li>在每个<code>volatile</code>写操作后面插入<code>StoreLoad</code>屏障</li>
+<li>在每个<code>volatile</code>读操作后面插入<code>LoadLoad</code>屏障</li>
+<li>在每个<code>volatile</code>读操作后面插入<code>LoadStore</code>屏障</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">VolatileBarrieExample</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> a;</span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">int</span> v1 = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">int</span> v2 = <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">readAndWrite</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// volatile 读</span></span><br><span class="line">        <span class="keyword">int</span> i = v1;</span><br><span class="line">        <span class="comment">// volatile 读</span></span><br><span class="line">        <span class="keyword">int</span> j = v2;</span><br><span class="line">        <span class="comment">// 普通写</span></span><br><span class="line">        a = i + j;</span><br><span class="line">        <span class="comment">// volatile 写</span></span><br><span class="line">        v1 = i + <span class="number">1</span>;</span><br><span class="line">        <span class="comment">// volatile 写</span></span><br><span class="line">        v2 = j * <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>针对<code>readAndWrite()</code>方法，编译器在生成字节码时会做如下优化:</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/18.jpg" alt="指令序列示意图"></p>
+<blockquote>
+<p>以上优化针对不同处理器平台，不同的内存模型，内存屏障的插入还可以根据具体的处理器内存模型继续优化。</p>
+</blockquote>
+<h6 id="5-volatile内存语义增强"><a href="#5-volatile内存语义增强" class="headerlink" title="5. volatile内存语义增强"></a>5. <code>volatile</code>内存语义增强</h6><blockquote>
+<p>旧的内存模型中，<code>volatile</code>写-读没有锁的释放-获取所具有的的内存语义，即<code>volatile</code>写操作之前写操作并不会被写到内存中。<strong>为了提供一种比锁更轻量级的线程之间通信的机制</strong>，严格限制编译器和处理器对<code>volatile</code>变量与普通变量的重排序，确保<code>volatile</code>写-读和锁的释放-获取具有相同的内存语义</p>
+</blockquote>
+<blockquote>
+<p><code>volatile</code>仅仅保证对单个<code>volatile</code>变量的读/写具有原子性，而锁的互斥执行的特性可以确保对整个临界区代码的执行具有原子性。功能上，锁比<code>volatile</code>更强大；可伸缩性和执行性上，<code>volatile</code>更具有优势</p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/04/15/concurrent/chapter3/3.3_order_consistency/" rel="prev" title="顺序一致性">
+      <i class="fa fa-chevron-left"></i> 顺序一致性
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/04/26/concurrent/chapter3/3.5_lock/" rel="next" title="锁的内存语义">
+      锁的内存语义 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

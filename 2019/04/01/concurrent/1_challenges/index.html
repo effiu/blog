@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="并发编程的目的是为了让程序运行更快，但是并不是启动更多的线程就能让程序更大限度并发执行。如果想通过多线程执行任务使程序运行得更快，会面临很多挑战。上下文切换问题、死锁问题，以及受限于硬件和软件的资源限制问题  1. 上下文切换 即使单核处理器也支持多线程执行代码，CPU通过给每个线程分配CPU时间片实现。一般是几十毫秒(ms)   多线程并不一定快 代码       循环次数 串行执行 并发执行">
+<meta property="og:type" content="article">
+<meta property="og:title" content="并发编程的挑战">
+<meta property="og:url" content="https://www.effiu.cn/2019/04/01/concurrent/1_challenges/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="并发编程的目的是为了让程序运行更快，但是并不是启动更多的线程就能让程序更大限度并发执行。如果想通过多线程执行任务使程序运行得更快，会面临很多挑战。上下文切换问题、死锁问题，以及受限于硬件和软件的资源限制问题  1. 上下文切换 即使单核处理器也支持多线程执行代码，CPU通过给每个线程分配CPU时间片实现。一般是几十毫秒(ms)   多线程并不一定快 代码       循环次数 串行执行 并发执行">
+<meta property="og:locale">
+<meta property="article:published_time" content="2019-04-01T13:41:50.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/04/01/concurrent/1_challenges/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>并发编程的挑战 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2"><span class="nav-number">1.</span> <span class="nav-text">1. 上下文切换</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E5%A6%82%E4%BD%95%E5%87%8F%E5%B0%91%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2"><span class="nav-number">2.</span> <span class="nav-text">2. 如何减少上下文切换</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E6%AD%BB%E9%94%81"><span class="nav-number">3.</span> <span class="nav-text">3. 死锁</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-%E8%B5%84%E6%BA%90%E9%99%90%E5%88%B6%E7%9A%84%E6%8C%91%E6%88%98"><span class="nav-number">4.</span> <span class="nav-text">4. 资源限制的挑战</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#5-%E6%80%BB%E7%BB%93"><span class="nav-number">5.</span> <span class="nav-text">5. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/04/01/concurrent/1_challenges/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          并发编程的挑战
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-04-01 21:41 21:41:50" itemprop="dateCreated datePublished" datetime="2019-04-01T21:41:50+08:00">2019-04-01 21:41</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/04/01/concurrent/1_challenges/" class="post-meta-item leancloud_visitors" data-flag-title="并发编程的挑战" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/04/01/concurrent/1_challenges/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/04/01/concurrent/1_challenges/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p>并发编程的目的是为了让程序运行更快，但是并不是启动更多的线程就能让程序更大限度并发执行。如果想通过多线程执行任务使程序运行得更快，会面临很多挑战。<strong>上下文切换问题、死锁问题，以及受限于硬件和软件的资源限制问题</strong></p>
+</blockquote>
+<h6 id="1-上下文切换"><a href="#1-上下文切换" class="headerlink" title="1. 上下文切换"></a>1. 上下文切换</h6><blockquote>
+<p>即使单核处理器也支持多线程执行代码，CPU通过给每个线程分配CPU时间片实现。一般是几十毫秒(ms)</p>
+</blockquote>
+<ol>
+<li>多线程并不一定快<blockquote>
+<p><a target="_blank" rel="noopener" href="https://dev.tencent.com/u/effiu/p/essay-project/git/blob/master/src/main/java/com/essay/concurrent/learn/chapter1/ConcurrencyTest.java">代码</a></p>
+</blockquote>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>循环次数</th>
+<th>串行执行</th>
+<th>并发执行</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>10亿</td>
+<td>1250ms</td>
+<td>1000ms</td>
+</tr>
+<tr>
+<td>1亿</td>
+<td>155ms</td>
+<td>220ms</td>
+</tr>
+<tr>
+<td>10万</td>
+<td>4 ms</td>
+<td>110ms</td>
+</tr>
+</tbody></table>
+<h6 id="2-如何减少上下文切换"><a href="#2-如何减少上下文切换" class="headerlink" title="2. 如何减少上下文切换"></a>2. 如何减少上下文切换</h6><blockquote>
+<p>减少上下文切换的方法有无锁并发编程、CAS算法、使用少线程和使用协程</p>
+</blockquote>
+<ul>
+<li>无锁并发编程。多线程竞争锁时，会引起上下文切换，所以多线程处理数据时，可以用一些办法避免上下文切换，例如将数据ID按照Hash算法取模分段，不同的线程处理不同段的数据 </li>
+<li>CAS算法。Java的Atomic包使用CAS算法来更新数据，而不需要加锁</li>
+<li>使用最少线程。避免创建不必要的线程。</li>
+<li>协程。单线程实现多任务的调度，并在单线程里维持多个任务间的切换</li>
+</ul>
+<blockquote>
+<p>减少上下文切换</p>
+</blockquote>
+<ol>
+<li><p>查看当前Java进程PID</p>
+</li>
+<li><p>jstack pid 查看当前Java进程的线程,以下是部分线程信息</p>
+ <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">[root@vdevops opt]# jstack 27568</span><br><span class="line"><span class="number">2018</span>-<span class="number">12</span>-<span class="number">26</span> <span class="number">23</span>:<span class="number">04</span>:<span class="number">10</span></span><br><span class="line"><span class="function">Full thread dump Java <span class="title">HotSpot</span><span class="params">(TM)</span> 64-Bit Server <span class="title">VM</span> <span class="params">(<span class="number">25.144</span>-b01 mixed mode)</span>:</span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">&quot;Attach Listener&quot; #42 daemon prio</span>=<span class="number">9</span> os_prio=<span class="number">0</span> tid=<span class="number">0x00007f708c007000</span> nid=<span class="number">0x8f6</span> waiting on condition [<span class="number">0x0000000000000000</span>]</span><br><span class="line">   java.lang.Thread.State: RUNNABLE</span><br><span class="line"></span><br><span class="line">&quot;ajp-nio-8009-Acceptor-0&quot; #40 daemon prio=5 os_prio=0 tid=0x00007f70b4499000 nid=0x6bd8 runnable [0x00007f70828e7000]</span><br><span class="line">   java.lang.Thread.State: RUNNABLE</span><br><span class="line">    at sun.nio.ch.ServerSocketChannelImpl.accept0(Native Method)</span><br><span class="line">    at sun.nio.ch.ServerSocketChannelImpl.accept(ServerSocketChannelImpl.java:<span class="number">422</span>)</span><br><span class="line">    at sun.nio.ch.ServerSocketChannelImpl.accept(ServerSocketChannelImpl.java:<span class="number">250</span>)</span><br><span class="line">    - locked &lt;<span class="number">0x00000000f5fceae8</span>&gt; (a java.lang.Object)</span><br><span class="line">    at org.apache.tomcat.util.net.NioEndpoint$Acceptor.run(NioEndpoint.java:<span class="number">692</span>)</span><br><span class="line">    at java.lang.Thread.run(Thread.java:<span class="number">748</span>)</span><br><span class="line"></span><br><span class="line">&quot;ajp-nio-8009-ClientPoller-0&quot; #39 daemon prio=5 os_prio=0 tid=0x00007f70b4497000 nid=0x6bd7 runnable [0x00007f70829e8000]</span><br><span class="line">   java.lang.Thread.State: RUNNABLE</span><br><span class="line">    at sun.nio.ch.EPollArrayWrapper.epollWait(Native Method)</span><br><span class="line">    at sun.nio.ch.EPollArrayWrapper.poll(EPollArrayWrapper.java:<span class="number">269</span>)</span><br><span class="line">    at sun.nio.ch.EPollSelectorImpl.doSelect(EPollSelectorImpl.java:<span class="number">93</span>)</span><br><span class="line">    at sun.nio.ch.SelectorImpl.lockAndDoSelect(SelectorImpl.java:<span class="number">86</span>)</span><br><span class="line">    - locked &lt;<span class="number">0x00000000f69cf4c8</span>&gt; (a sun.nio.ch.Util$<span class="number">3</span>)</span><br><span class="line">    - locked &lt;<span class="number">0x00000000f69cf4d8</span>&gt; (a java.util.Collections$UnmodifiableSet)</span><br><span class="line">    - locked &lt;<span class="number">0x00000000f69cf480</span>&gt; (a sun.nio.ch.EPollSelectorImpl)</span><br><span class="line">    at sun.nio.ch.SelectorImpl.select(SelectorImpl.java:<span class="number">97</span>)</span><br><span class="line">    at org.apache.tomcat.util.net.NioEndpoint$Poller.run(NioEndpoint.java:<span class="number">1051</span>)</span><br><span class="line">    at java.lang.Thread.run(Thread.java:<span class="number">748</span>)</span><br></pre></td></tr></table></figure>
+ <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;VM Thread&quot;</span> os_prio=<span class="number">0</span> tid=<span class="number">0x00007f70b406d800</span> nid=<span class="number">0x6bb2</span> runnable </span><br><span class="line"><span class="string">&quot;VM Periodic Task Thread&quot;</span> os_prio=<span class="number">0</span> tid=<span class="number">0x00007f70b40b7000</span> nid=<span class="number">0x6bb9</span> waiting on condition </span><br><span class="line">JNI global references: <span class="number">259</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p>统计线程分别处于的状态</p>
+<blockquote>
+<p><code>awk &#39;&#123;print $2$3$4$5&#125;&#39; | grep &#39;java.lang.Thread.State&#39; dump | sort | uniq -c</code></p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">12</span>    java.lang.Thread.State: RUNNABLE</span><br><span class="line"><span class="number">1</span>    java.lang.Thread.State: TIMED_WAITING (on object monitor)</span><br><span class="line"><span class="number">1</span>    java.lang.Thread.State: TIMED_WAITING (parking)</span><br><span class="line"><span class="number">1</span>    java.lang.Thread.State: TIMED_WAITING (sleeping)</span><br><span class="line"><span class="number">2</span>    java.lang.Thread.State: WAITING (on object monitor)</span><br><span class="line"><span class="number">20</span>    java.lang.Thread.State: WAITING (parking)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>分析线程，以及找到解决方案</p>
+</li>
+</ol>
+<h6 id="3-死锁"><a href="#3-死锁" class="headerlink" title="3. 死锁"></a>3. 死锁</h6><blockquote>
+<p>锁可能会引起死锁，会造成系统不可用，如下是一些避免死锁的办法</p>
+</blockquote>
+<ul>
+<li>避免一个线程同时获取多个锁</li>
+<li>避免一个线程在锁内同时占用多个资源，尽量保证每个锁只占用一个资源</li>
+<li>尝试使用定时锁，使用<code>lock.tryLock(timeout)</code>替代使用内部锁机制</li>
+<li>对于数据库锁，加锁和解锁必须在一个数据库连接里，否则会出现解锁失败的情况</li>
+</ul>
+<h6 id="4-资源限制的挑战"><a href="#4-资源限制的挑战" class="headerlink" title="4. 资源限制的挑战"></a>4. 资源限制的挑战</h6><blockquote>
+<p>指进行并发编程时，程序的执行速度受限于计算机硬件资源或者软件资源。硬件资源限制有带宽的上传/下载速度、硬盘的读写速度和CPU的处理速度。软件限制有数据库的连接和socket连接数等。</p>
+</blockquote>
+<ul>
+<li>资源限制引发的问题：将代码执行速度加快的原则是将代码中串行执行的部分编程并行，但是某段代码由于资源限制，仍在串行执行，这时候程序就会因为上下文切换和资源调度运行更慢。</li>
+<li>解决资源限制的问题：硬件资源限制，可以考虑使用集群并发执行程序。软件资源限制，可以使用资源池复用。</li>
+<li>在资源限制的情况下进行并发编程：根据不同的资源限制调整程序的并发度，例如下载文件依赖于带宽和硬盘读写速度。</li>
+</ul>
+<h6 id="5-总结"><a href="#5-总结" class="headerlink" title="5. 总结"></a>5. 总结</h6><blockquote>
+<p>多使用JDK并发包提供的并发容器和工具类解决并发问题</p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/04/02/essay/linux_cmd/" rel="next" title="linux 命令">
+      linux 命令 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

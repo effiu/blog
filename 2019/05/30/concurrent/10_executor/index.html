@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="使用多线程异步执行任务，会因为Java线程的创建与销毁消耗大量的计算资源。 Java线程即是工作单元，又是执行机制。Runnable和Callable是工作单元，Executor是执行机制。  1. Executor1. Executor的两级调度模型 在HotSpot VM线程模型中，Java线程(java.lang.Thread)被一对一映射为本地操作系统线程。Java线程启动时会创建一个本">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Executor框架">
+<meta property="og:url" content="https://www.effiu.cn/2019/05/30/concurrent/10_executor/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="使用多线程异步执行任务，会因为Java线程的创建与销毁消耗大量的计算资源。 Java线程即是工作单元，又是执行机制。Runnable和Callable是工作单元，Executor是执行机制。  1. Executor1. Executor的两级调度模型 在HotSpot VM线程模型中，Java线程(java.lang.Thread)被一对一映射为本地操作系统线程。Java线程启动时会创建一个本">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/62.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/63.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/64.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/65.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/66.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/67.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/68.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/69.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/70.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/71.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/73.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/74.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/75.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/76.jpg">
+<meta property="article:published_time" content="2019-05-30T15:30:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/62.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/05/30/concurrent/10_executor/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Executor框架 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-Executor"><span class="nav-number">1.</span> <span class="nav-text">1. Executor</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-Executor%E7%9A%84%E4%B8%A4%E7%BA%A7%E8%B0%83%E5%BA%A6%E6%A8%A1%E5%9E%8B"><span class="nav-number">1.1.</span> <span class="nav-text">1. Executor的两级调度模型</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-Executor%E6%A1%86%E6%9E%B6%E7%9A%84%E7%BB%93%E6%9E%84%E4%B8%8E%E6%88%90%E5%91%98"><span class="nav-number">1.2.</span> <span class="nav-text">2. Executor框架的结构与成员</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-ThreadPoolExecutor%E8%AF%A6%E8%A7%A3"><span class="nav-number">2.</span> <span class="nav-text">2. ThreadPoolExecutor详解</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-FixedThreadPool"><span class="nav-number">2.1.</span> <span class="nav-text">1. FixedThreadPool</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-SingleThreadExecutor"><span class="nav-number">2.2.</span> <span class="nav-text">2. SingleThreadExecutor</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-CachedThreadPool"><span class="nav-number">2.3.</span> <span class="nav-text">3. CachedThreadPool</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-ScheduledThreadPoolExecutor"><span class="nav-number">3.</span> <span class="nav-text">3. ScheduledThreadPoolExecutor</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E8%BF%90%E8%A1%8C%E6%9C%BA%E5%88%B6"><span class="nav-number">3.1.</span> <span class="nav-text">1. 运行机制</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-ScheduledThreadPoolExecutor%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.2.</span> <span class="nav-text">2. ScheduledThreadPoolExecutor实现</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-FutureTask"><span class="nav-number">4.</span> <span class="nav-text">3. FutureTask</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-FutureTask%E7%AE%80%E4%BB%8B"><span class="nav-number">4.1.</span> <span class="nav-text">1. FutureTask简介</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-FutureTask%E4%BD%BF%E7%94%A8"><span class="nav-number">4.2.</span> <span class="nav-text">2. FutureTask使用</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-FutrueTask%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">4.3.</span> <span class="nav-text">3. FutrueTask的实现</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/05/30/concurrent/10_executor/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Executor框架
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-05-30 23:30 23:30:00" itemprop="dateCreated datePublished" datetime="2019-05-30T23:30:00+08:00">2019-05-30 23:30</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/05/30/concurrent/10_executor/" class="post-meta-item leancloud_visitors" data-flag-title="Executor框架" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/05/30/concurrent/10_executor/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/05/30/concurrent/10_executor/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p>使用多线程异步执行任务，会因为Java线程的创建与销毁消耗大量的计算资源。</p>
+<p>Java线程即是工作单元，又是执行机制。<code>Runnable</code>和<code>Callable</code>是工作单元，<code>Executor</code>是执行机制。</p>
+</blockquote>
+<h5 id="1-Executor"><a href="#1-Executor" class="headerlink" title="1. Executor"></a>1. <code>Executor</code></h5><h6 id="1-Executor的两级调度模型"><a href="#1-Executor的两级调度模型" class="headerlink" title="1. Executor的两级调度模型"></a>1. <code>Executor</code>的两级调度模型</h6><blockquote>
+<p>在<code>HotSpot VM</code>线程模型中，Java线程(<code>java.lang.Thread</code>)被一对一映射为本地操作系统线程。Java线程启动时会创建一个本地操作系统线程；该Java线程终止是，这个操作系统也会被回收，操作系统会调度所有线程并将它们分配给可用的CPU。</p>
+<p>在上层，Java多线程程序通常把应用分解为若干个任务，然后使用用户级的调度器(<code>Executor</code>框架)将这些任务映射为固定数量的线程；底层，操作系统内核将这些线程映射到硬件处理器上。</p>
+<p>如下图：应用程序通过<code>Executor</code>框架控制上层的调度；而下层的调度由操作系统内核控制，其不受应用程序控制。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/62.jpg" alt="两级调度模型"></p>
+<h6 id="2-Executor框架的结构与成员"><a href="#2-Executor框架的结构与成员" class="headerlink" title="2. Executor框架的结构与成员"></a>2. <code>Executor</code>框架的结构与成员</h6><ol>
+<li><code>Executor</code>框架的结构</li>
+</ol>
+<blockquote>
+<p><code>Executor</code>框架主要由3大部分组成：</p>
+</blockquote>
+<ul>
+<li>任务，被执行任务需要实现接口:<code>Runnable</code>或者<code>Callable</code></li>
+<li>任务的执行，任务执行机制的核心接口<code>Executor</code>，继承自<code>Executor</code>的<code>ExecutorService</code>,其有两个关键实现类。<code>ThreadPoolExecutor</code>和<code>ScheduledThreadPoolExecutor</code></li>
+<li>异步计算的结果，<code>Future</code>接口及其实现<code>FutureTask</code></li>
+</ul>
+<blockquote>
+<p><code>Executor</code>框架的主要接口与类如下图:</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/63.jpg" alt="类与接口"></p>
+<ul>
+<li><code>Executor</code>: 是<code>Executor</code>的基础，将任务的提交与任务的执行分离</li>
+<li><code>ThreadPoolExecutor</code>，线程池的核心实现，用来执行被提交的任务</li>
+<li><code>ScheduledThreadPoolExecutor</code>，是一个实现类，可以在给定延迟后执行或者定时执行，比<code>Timer</code>更强大、灵活</li>
+<li><code>Future</code>，接口及其实现<code>FutureTask</code>，用于异步计算的结果</li>
+<li><code>Runnable</code>和<code>Callable</code>接口，代表任务，可以被<code>ThreadPoolExecutor</code>或者<code>ScheduledThreadPoolExecutor</code>执行</li>
+</ul>
+<blockquote>
+<p><code>Executor</code>使用示意图</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/64.jpg" alt="使用示意图"></p>
+<blockquote>
+<p>主线程创建实现<code>Runnable</code>或者<code>Callable</code>接口的任务对象。然后把对象交给<code>ExecutorService</code>(<code>submit()</code>、<code>execute()</code>)。若需要返回结果，则需要使用<code>ExecutorService.submit(Callable task)</code>，然后<code>task.get()</code>获取异步返回结果，<code>task.cancel(boolean mayInterruptIfRuning)</code>用来取消任务的执行。</p>
+</blockquote>
+<ol start="2">
+<li><code>Executor</code>框架的成员</li>
+</ol>
+<blockquote>
+<p>框架的成员<code>ThreadPoolExecutor</code>、<code>ScheduledThreadPoolExecutor</code>、<code>Future</code>接口、<code>Runnable</code>接口、<code>Callable</code>接口<code>Executors</code></p>
+</blockquote>
+<ol>
+<li><code>ThreadPoolExecutor</code></li>
+</ol>
+<blockquote>
+<p>可以使用工厂类创建3种类型的线程池</p>
+</blockquote>
+<ul>
+<li><code>SingleThreadExecutor</code>: 适用于需要保证顺序地执行各个任务，在任意时间点不会有多个线程获得的场景</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newSingleThreadExecutor</span><span class="params">()</span></span>&#123;&#125;</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newSingleThreadExecutor</span><span class="params">(ThreadFactory threadFactory)</span></span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>FixedThreadPool</code>: 适用于为了满足资源管理的需求而限制当前线程数量的应用场景</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newFixedThreadPool</span><span class="params">(<span class="keyword">int</span> nThreads)</span> </span>&#123;&#125;</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newFixedThreadPool</span><span class="params">(<span class="keyword">int</span> nThreads, ThreadFactory threadFactory)</span> </span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>CachedThreadPool</code>: 是大小无界的线程池，适用于执行很多短期异步任务的小程序</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newCachedThreadPool</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newCachedThreadPool</span><span class="params">(ThreadFactory threadFactory)</span> </span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li><code>ScheduledThreadPoolExecutor</code>，通常使用工厂类<code>Executors</code>创建</li>
+</ol>
+<ul>
+<li><code>ScheduledThreadPoolExecutor</code>，包含若干线程，适用于需要多个后台线程执行周期任务，同时为了满足组员管理的需求而限制后台线程数量的应用场景</li>
+<li><code>SingleScheduledThreadPoolExecutor</code>，包含一个线程线程，适用于需要执行单个后台线程执行周期任务，同时也会顺序的执行各个任务。</li>
+</ul>
+<ol start="3">
+<li><code>Futurn</code>接口</li>
+<li><code>Runnable</code>接口和<code>Callable</code>接口</li>
+</ol>
+<blockquote>
+<p>都是用来提交任务的接口。<code>Callable</code>接口会返回执行结果。</p>
+<p>以下方法会把<code>Runnable</code>包装成一个<code>Callable</code>接口。</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> Callable&lt;Object&gt; <span class="title">callable</span><span class="params">(Runnable task)</span> </span>&#123;&#125;</span><br><span class="line"><span class="keyword">public</span> <span class="keyword">static</span> &lt;T&gt; <span class="function">Callable&lt;T&gt; <span class="title">callable</span><span class="params">(Runnable task, T result)</span> </span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<h5 id="2-ThreadPoolExecutor详解"><a href="#2-ThreadPoolExecutor详解" class="headerlink" title="2. ThreadPoolExecutor详解"></a>2. <code>ThreadPoolExecutor</code>详解</h5><blockquote>
+<p><code>ThreadPoolExecutor</code>是<code>Executor</code>框架的核心类。主要由以下投个组件构成。</p>
+</blockquote>
+<ul>
+<li><code>corePool</code>: 核心线程池的大小</li>
+<li><code>maximumPool</code>: 最大线程池的大小</li>
+<li><code>BlockingQueue</code>: 用来暂时保存任务的工作队列</li>
+<li><code>RejectedExecutionHandler</code>: 当<code>ThreadPoolExecutor</code>已经关闭或<code>ThreadPoolExecutor</code>已经饱和<br>时（达到了最大线程池大小且工作队列已满），<code>execute()</code>方法将要调用的<code>Handler</code></li>
+</ul>
+<blockquote>
+<p> 通过Executor框架的工具类Executors，可以创建3种类型的ThreadPoolExecutor。</p>
+</blockquote>
+<ul>
+<li><code>FixedThreadPool</code></li>
+<li><code>SingleThreadExecutor</code></li>
+<li><code>CachedThreadPool</code></li>
+</ul>
+<h6 id="1-FixedThreadPool"><a href="#1-FixedThreadPool" class="headerlink" title="1. FixedThreadPool"></a>1. <code>FixedThreadPool</code></h6><blockquote>
+<p>可重用固定线程数的线程池。<code>keepAliveTime</code>是多余的空闲线程等待新任务的时间，超时线程将被终止。执行示意图如下：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newFixedThreadPool</span><span class="params">(<span class="keyword">int</span> nThreads)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> ThreadPoolExecutor(nThreads, nThreads,</span><br><span class="line">                                      <span class="number">0L</span>, TimeUnit.MILLISECONDS,</span><br><span class="line">                                      <span class="keyword">new</span> LinkedBlockingQueue&lt;Runnable&gt;());</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://images.effiu.cn/gitbook/concurrent/65.jpg"></p>
+<ul>
+<li>线程数小于<code>corePoolSize</code>时会创建新线程执行任务</li>
+<li>达到<code>corePoolSize</code>时，将任务放到<code>LinkedBlockingQueue</code>队列中去</li>
+<li>循环从队列中获取任务</li>
+<li><code>LinkedBlockingQueue</code>是无界队列(<code>Integer.MAX_VALUE</code>)。会产生以下影响：<ul>
+<li>线程数达到<code>corePoolSize</code>后，新任务将在无界队列中等待</li>
+<li><code>maximumPoolCore</code>是一个无效参数</li>
+<li><code>keepAliveTime</code>是一个无效参数，因为并不会销毁<code>corePoolSize</code></li>
+<li>不执行<code>shutdown()</code>或者<code>shutdownNow()</code>将不会拒绝任何任务</li>
+</ul>
+</li>
+</ul>
+<h6 id="2-SingleThreadExecutor"><a href="#2-SingleThreadExecutor" class="headerlink" title="2. SingleThreadExecutor"></a>2. <code>SingleThreadExecutor</code></h6><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newSingleThreadExecutor</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    	<span class="keyword">return</span> <span class="keyword">new</span> FinalizableDelegatedExecutorService</span><br><span class="line">        	(<span class="keyword">new</span> ThreadPoolExecutor(<span class="number">1</span>, <span class="number">1</span>,</span><br><span class="line">                                	<span class="number">0L</span>, TimeUnit.MILLISECONDS,</span><br><span class="line">                                	<span class="keyword">new</span> LinkedBlockingQueue&lt;Runnable&gt;()));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>与<code>FixedThreadPool</code>相比，特殊之处是<code>corePool</code>和<code>maximumPool</code>均被设置为1，运行示意图如下：</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/66.jpg"></p>
+<ul>
+<li>线程数小于<code>corePoolSize</code>时会创建1个线程执行任务</li>
+<li>达到<code>corePoolSize</code>时，将任务放到<code>LinkedBlockingQueue</code>队列中去</li>
+<li>执行完任务后，会在一个无限循环中反复从<code>LinkedBlockingQueue</code>中获取任务</li>
+</ul>
+<h6 id="3-CachedThreadPool"><a href="#3-CachedThreadPool" class="headerlink" title="3. CachedThreadPool"></a>3. <code>CachedThreadPool</code></h6><blockquote>
+<p>是一个会根据需要创建线程的线程池</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newCachedThreadPool</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> ThreadPoolExecutor(<span class="number">0</span>, Integer.MAX_VALUE,</span><br><span class="line">                                      <span class="number">60L</span>, TimeUnit.SECONDS,</span><br><span class="line">                                      <span class="keyword">new</span> SynchronousQueue&lt;Runnable&gt;());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>corePoolSize</code>设置为0，<code>maximumPoolSize</code>设置为<code>Integer.MAX_VALUE</code>，<code>keepAliveTime</code>设置为60s</p>
+<p>队列为<code>SynchronousQueue</code>。当线程提交任务速度大于处理任务速度时会不断创建新线程执行任务。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/67.jpg"></p>
+<ul>
+<li><code>SynchronousQueue.offer</code>，将任务放到阻塞队列中，若有空闲线程在执行<code>SynchronousQueue.poll</code>则配对成功</li>
+<li><code>maximumPool</code>为空或者没有空闲 线程时，<code>CachedThreadPool</code>会创建一个新线程执行任务</li>
+<li>新线程执行完任务后，会执行<code>SynchronousQueue.poll</code>获取新任务，否则等待60s，超时则销毁线程</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/68.jpg"></p>
+<h5 id="3-ScheduledThreadPoolExecutor"><a href="#3-ScheduledThreadPoolExecutor" class="headerlink" title="3. ScheduledThreadPoolExecutor"></a>3. <code>ScheduledThreadPoolExecutor</code></h5><blockquote>
+<p>主要用来给延迟或定时任务使用，与<code>Timer</code>类似，单比<code>Timer</code>强大、灵活，可以指定多个后台线程。</p>
+</blockquote>
+<h6 id="1-运行机制"><a href="#1-运行机制" class="headerlink" title="1. 运行机制"></a>1. 运行机制</h6><blockquote>
+<p>以下是执行示意图：</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/69.jpg"></p>
+<blockquote>
+<p>为了实现周期性任务，对<code>ThreadPoolExecutor</code>做了修改</p>
+</blockquote>
+<ul>
+<li>使用<code>DelayQueue</code>延迟任务队列，其是无界队列</li>
+<li>获取任务方式改变</li>
+<li>执行周期任务后，增加了额外的处理</li>
+</ul>
+<blockquote>
+<p><code>ScheduledThreadPoolExecutor</code>执行过程</p>
+</blockquote>
+<ul>
+<li>调用<code>ScheduledThreadPoolExecutor#scheduleAtFixedRate()</code>或者<code>ScheduledThreadPoolExecutor#scheduleWithFixedDelay()</code>时会向<code>DelayQueue</code>中添加一个实现了<code>RunnableScheduledFuture</code>接口的<code>ScheduledFutureTask</code></li>
+<li>线程池中的线程从<code>DelayQueue</code>中获取<code>ScheduledFutureTask</code>执行</li>
+</ul>
+<h6 id="2-ScheduledThreadPoolExecutor实现"><a href="#2-ScheduledThreadPoolExecutor实现" class="headerlink" title="2. ScheduledThreadPoolExecutor实现"></a>2. <code>ScheduledThreadPoolExecutor</code>实现</h6><blockquote>
+<p><code>ScheduledFutureTask</code>包含3个成员</p>
+</blockquote>
+<ul>
+<li><code>long</code>型成员变量<code>time</code></li>
+<li><code>long</code>型<code>sequenceNumber</code>，表示任务被添加到<code>ScheduledThreadPoolExecutor</code>队列中的序号</li>
+<li><code>long</code>型<code>period</code>，任务的执行间隔周期</li>
+</ul>
+<blockquote>
+<p><code>DelayQueue</code>，内部封装了<code>PriorityQueue</code>会对队列中的<code>ScheduledFutureTask</code>进行排序，基于<code>time</code>和<code>sequenceNumber</code>。<strong>JDK8有变化</strong>。以下是执行任务的过程：</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/70.jpg"></p>
+<ul>
+<li>线程1从<code>DelayQueue</code>中获取已到周期的<code>ScheduledFutureTask</code></li>
+<li>线程1执行这个任务</li>
+<li>线程1修改这个任务的<code>time</code>为下次被执行的时间</li>
+<li>线程1把修改后的任务放回<code>DelayQueue</code></li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> RunnableScheduledFuture&lt;?&gt; take() <span class="keyword">throws</span> InterruptedException &#123;</span><br><span class="line">    <span class="comment">// 队列持有的锁</span></span><br><span class="line">    <span class="keyword">final</span> ReentrantLock lock = <span class="keyword">this</span>.lock;</span><br><span class="line">    <span class="comment">// 可中断地获取锁</span></span><br><span class="line">    lock.lockInterruptibly();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 循环获取任务</span></span><br><span class="line">        <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">            <span class="comment">// 查看队列中的第一个任务</span></span><br><span class="line">            RunnableScheduledFuture&lt;?&gt; first = queue[<span class="number">0</span>];</span><br><span class="line">            <span class="comment">// 说明队列为空，等待</span></span><br><span class="line">            <span class="keyword">if</span> (first == <span class="keyword">null</span>)</span><br><span class="line">                available.await();</span><br><span class="line">            <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="comment">// 不为空，判断当前任务的执行延迟时间</span></span><br><span class="line">                <span class="keyword">long</span> delay = first.getDelay(NANOSECONDS);</span><br><span class="line">                <span class="keyword">if</span> (delay &lt;= <span class="number">0</span>)</span><br><span class="line">                    <span class="comment">// 已过执行时间，执行并将第一个任务放到最后</span></span><br><span class="line">                    <span class="comment">// 唯一出口</span></span><br><span class="line">                    <span class="keyword">return</span> finishPoll(first);</span><br><span class="line">                first = <span class="keyword">null</span>; <span class="comment">// don&#x27;t retain ref while waiting</span></span><br><span class="line">            	<span class="comment">// leader不为null，说明已经有其他线程获等待获取队列头元素</span></span><br><span class="line">                <span class="keyword">if</span> (leader != <span class="keyword">null</span>)</span><br><span class="line">                    available.await();</span><br><span class="line">                <span class="keyword">else</span> &#123;</span><br><span class="line">                    Thread thisThread = Thread.currentThread();</span><br><span class="line">					<span class="comment">// 当前线程设置为leader</span></span><br><span class="line">                    leader = thisThread;</span><br><span class="line">                    <span class="keyword">try</span> &#123;</span><br><span class="line">                        <span class="comment">// 等待到执行时间</span></span><br><span class="line">                        available.awaitNanos(delay);</span><br><span class="line">                    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                        <span class="keyword">if</span> (leader == thisThread)</span><br><span class="line">                            leader = <span class="keyword">null</span>;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (leader == <span class="keyword">null</span> &amp;&amp; queue[<span class="number">0</span>] != <span class="keyword">null</span>)</span><br><span class="line">            <span class="comment">// 通知等待队列中的线程</span></span><br><span class="line">            available.signal();</span><br><span class="line">        lock.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<p><img src="https://images.effiu.cn/gitbook/concurrent/71.jpg"></p>
+<h5 id="3-FutureTask"><a href="#3-FutureTask" class="headerlink" title="3. FutureTask"></a>3. <code>FutureTask</code></h5><h6 id="1-FutureTask简介"><a href="#1-FutureTask简介" class="headerlink" title="1. FutureTask简介"></a>1. <code>FutureTask</code>简介</h6><blockquote>
+<p><code>Future</code>接口和<code>FutureTask</code>类，代表异步计算的结果。<code>FutureTask</code>还实现了<code>Runnable</code>接口，说明<code>FutureTask</code>可以交给<code>Executor</code>执行，也可以直接执行<code>FutureTask.run()</code>。<code>FutureTask</code>有3种状态：</p>
+</blockquote>
+<ul>
+<li>未启动，<code>FutureTask.run()</code>方法没有被执行之前处于未启动状态。</li>
+<li>已启动，<code>FutureTask.run()</code>调用后</li>
+<li>已完成，<code>FutureTask.run()</code>执行结束后(正常结束或者被取消)后，处于已完结状态</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/73.jpg"></p>
+<ul>
+<li><code>FutureTask</code>处于未启动或已启动状态时，<code>FutureTask.get()</code>将会阻塞线程</li>
+<li><code>FutureTask.cancel(boolean)</code>  <ul>
+<li>未启动时，将直接取消任务。</li>
+<li>已启动时，<code>FutureTask.cancel(true)</code>将会尝试立即中断执行此任务的线程；<code>FutureTask.cancel(false)</code>将不会对正在执行任务的线程产生影响</li>
+<li>已完成时，返回<code>false</code></li>
+</ul>
+</li>
+</ul>
+<h6 id="2-FutureTask使用"><a href="#2-FutureTask使用" class="headerlink" title="2. FutureTask使用"></a>2. <code>FutureTask</code>使用</h6><blockquote>
+<p><code>FutureTask</code>可以交给<code>Executor</code>执行，也可以通过<code>ExecutorService.submit(···)</code>返回一个<code>FutureTask</code>。</p>
+<p><strong style='color:red'>当一个线程需要等待另一个线程把某个任务执行完后才能继续执行时，可以使用<code>FutureTask</code></strong></p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/74.jpg"></p>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/75.jpg"></p>
+<h6 id="3-FutrueTask的实现"><a href="#3-FutrueTask的实现" class="headerlink" title="3. FutrueTask的实现"></a>3. <code>FutrueTask</code>的实现</h6><blockquote>
+<p>基于<strong>AQS</strong>，其内部维护了一个私有的继承自<strong>AQS</strong>的子类<code>Sync</code>。</p>
+</blockquote>
+<ul>
+<li><code>FutureTask.get</code>类似于<code>acquire</code>操作</li>
+<li><code>FutureTask.run</code>和<code>FutureTask.cancel</code>类似于<code>release</code>操作</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/76.jpg"></p>
+<blockquote>
+<p><code>FutureTask</code>的所有操作都委托给了继承自<strong>AQS</strong>的私有内部类。</p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/28/concurrent/9_threadpool/" rel="prev" title="线程池">
+      <i class="fa fa-chevron-left"></i> 线程池
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/01/concurrent/11_concurrent_practice/" rel="next" title="并发编程实践">
+      并发编程实践 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

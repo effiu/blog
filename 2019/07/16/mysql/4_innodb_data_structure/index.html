@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="MySQL是一个黑盒，我们一般只负责使用客户端发送请求并等待服务器返回结果。那么表中的数据到底存到了哪里？以什么格式存放的？MySQL是以什么方式访问这些数据的？   MySQL服务器上对表中数据的读取和写入工作的是存储引擎，服务器支持不同的存储引擎，不同的存储引擎有不同的特性，其数据在不同的存储引擎中存放的格式也不同。具体见：认识MySQL。以下以最常用的InnoDB存储引擎为例，说明存储引擎">
+<meta property="og:type" content="article">
+<meta property="og:title" content="InnoDB数据结构">
+<meta property="og:url" content="https://www.effiu.cn/2019/07/16/mysql/4_innodb_data_structure/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="MySQL是一个黑盒，我们一般只负责使用客户端发送请求并等待服务器返回结果。那么表中的数据到底存到了哪里？以什么格式存放的？MySQL是以什么方式访问这些数据的？   MySQL服务器上对表中数据的读取和写入工作的是存储引擎，服务器支持不同的存储引擎，不同的存储引擎有不同的特性，其数据在不同的存储引擎中存放的格式也不同。具体见：认识MySQL。以下以最常用的InnoDB存储引擎为例，说明存储引擎">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/1.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/2.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/3.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/4.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/5.png">
+<meta property="article:published_time" content="2019-07-16T07:58:00.000Z">
+<meta property="article:modified_time" content="2020-06-10T15:39:31.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="MySQL">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/mysql/1.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/07/16/mysql/4_innodb_data_structure/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>InnoDB数据结构 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-InnoDB%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">1. InnoDB简介</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-InnoDB%E8%A1%8C%E6%A0%BC%E5%BC%8F"><span class="nav-number">2.</span> <span class="nav-text">2. InnoDB行格式</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#%E6%8C%87%E5%AE%9A%E8%A1%8C%E6%A0%BC%E5%BC%8F%E7%9A%84%E8%AF%AD%E6%B3%95"><span class="nav-number">2.1.</span> <span class="nav-text">指定行格式的语法</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-COMPACT%E8%A1%8C%E6%A0%BC%E5%BC%8F"><span class="nav-number">3.</span> <span class="nav-text">3. COMPACT行格式</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E8%AE%B0%E5%BD%95%E7%9A%84%E9%A2%9D%E5%A4%96%E4%BF%A1%E6%81%AF"><span class="nav-number">3.1.</span> <span class="nav-text">1. 记录的额外信息</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E8%AE%B0%E5%BD%95%E7%9A%84%E7%9C%9F%E5%AE%9E%E6%95%B0%E6%8D%AE"><span class="nav-number">3.2.</span> <span class="nav-text">2. 记录的真实数据</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-Redundant%E8%A1%8C%E6%A0%BC%E5%BC%8F"><span class="nav-number">4.</span> <span class="nav-text">4. Redundant行格式</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#5-%E8%A1%8C%E6%BA%A2%E5%87%BA%E6%95%B0%E6%8D%AE"><span class="nav-number">5.</span> <span class="nav-text">5. 行溢出数据</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E5%88%97%E6%9C%80%E5%A4%9A%E5%AD%98%E5%82%A8%E7%9A%84%E6%95%B0%E6%8D%AE"><span class="nav-number">5.1.</span> <span class="nav-text">1. 列最多存储的数据</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E8%AE%B0%E5%BD%95%E6%95%B0%E6%8D%AE%E5%A4%AA%E5%A4%A7%E4%BA%A7%E7%94%9F%E6%BA%A2%E5%87%BA"><span class="nav-number">5.2.</span> <span class="nav-text">2. 记录数据太大产生溢出</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E6%BA%A2%E5%87%BA%E7%9A%84%E4%B8%B4%E7%95%8C%E7%82%B9"><span class="nav-number">5.3.</span> <span class="nav-text">3. 溢出的临界点</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#5-Dynamic%E5%92%8CCompressed%E8%A1%8C%E6%A0%BC%E5%BC%8F"><span class="nav-number">6.</span> <span class="nav-text">5. Dynamic和Compressed行格式</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#6-%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">6. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/07/16/mysql/4_innodb_data_structure/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          InnoDB数据结构
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-07-16 15:58 15:58:00" itemprop="dateCreated datePublished" datetime="2019-07-16T15:58:00+08:00">2019-07-16 15:58</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-06-10 23:39 23:39:31" itemprop="dateModified" datetime="2020-06-10T23:39:31+08:00">2020-06-10 23:39</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/mysql/" itemprop="url" rel="index"><span itemprop="name">mysql</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/07/16/mysql/4_innodb_data_structure/" class="post-meta-item leancloud_visitors" data-flag-title="InnoDB数据结构" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/07/16/mysql/4_innodb_data_structure/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/07/16/mysql/4_innodb_data_structure/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p><code>MySQL</code>是一个黑盒，我们一般只负责使用客户端发送请求并等待服务器返回结果。那么表中的数据到底存到了哪里？以什么格式存放的？<code>MySQL</code>是以什么方式访问这些数据的？</p>
+</blockquote>
+<blockquote>
+<p><code>MySQL</code>服务器上对表中数据的读取和写入工作的是<strong>存储引擎</strong>，服务器支持不同的存储引擎，不同的存储引擎有不同的特性，<font color='red'>其数据在不同的存储引擎中存放的格式也不同</font>。具体见：<a href="https://www.effiu.cn/blog/2019/06/10/mysql/1_first_mysql/">认识MySQL</a>。以下以最常用的InnoDB存储引擎为例，说明存储引擎的记录结构。</p>
+</blockquote>
+<a id="more"></a>
+
+<h5 id="1-InnoDB简介"><a href="#1-InnoDB简介" class="headerlink" title="1. InnoDB简介"></a>1. InnoDB简介</h5><p><strong>InnoDB</strong>是将数据存储到磁盘上的存储引擎。因为真正处理数据的过程是在内存中，所以当<code>MySQL</code>读取和写入数据时，需要把磁盘中的数据加载到内存中或者将内存中的数据写入到磁盘上。而读写磁盘速度很慢，所以InnoDB采取的方式是：<font color='red'>将数据划分为若干页，以页作为磁盘和内存之间交互的基本单位，InnoDB中页的大小一般为16KB</font>。</p>
+<h5 id="2-InnoDB行格式"><a href="#2-InnoDB行格式" class="headerlink" title="2. InnoDB行格式"></a>2. InnoDB行格式</h5><p><code>MySQL</code>是以记录为单位向表中插入数据，所以这些记录在磁盘上存放方式称为<strong>行格式</strong>或者<strong>记录格式</strong>。<strong>InnoDB</strong>存储引擎有4中<strong>行格式</strong>：<code>Compact</code>、<code>Redunant</code>、<code>Dynamic</code>和<code>Compressed</code>。</p>
+<h6 id="指定行格式的语法"><a href="#指定行格式的语法" class="headerlink" title="指定行格式的语法"></a>指定行格式的语法</h6><p>在创建表或者修改表语句中指定<strong>行格式</strong>：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">create table table_name (row_info) row_format&#x3D;compact;</span><br><span class="line">alter table table_name row_format&#x3D;compact;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>以<code>learn</code>库的<code>record_format_demo</code>为例说明行格式：</p>
+</blockquote>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; use learn;</span><br><span class="line">Database changed</span><br><span class="line"></span><br><span class="line">mysql&gt; CREATE TABLE record_format_demo (c1 VARCHAR(10),c2 VARCHAR(10) NOT NULL,c3 CHAR(10), c4 VARCHAR(10)) CHARSET&#x3D;ascii ROW_FORMAT&#x3D;COMPACT;</span><br><span class="line">Query OK, 0 rows affected (0.18 sec)</span><br><span class="line"></span><br><span class="line">mysql&gt; INSERT INTO record_format_demo(c1, c2, c3, c4) VALUES(&#39;aaaa&#39;, &#39;bbb&#39;, &#39;cc&#39;, &#39;d&#39;), (&#39;eeee&#39;, &#39;fff&#39;, NULL, NULL);</span><br><span class="line">Query OK, 2 rows affected (0.00 sec)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">mysql&gt; select * from record_format_demo;</span><br><span class="line">+------+-----+------+------+</span><br><span class="line">| c1   | c2  | c3   | c4   |</span><br><span class="line">+------+-----+------+------+</span><br><span class="line">| aaaa | bbb | cc   | d    |</span><br><span class="line">| eeee | fff | NULL | NULL |</span><br><span class="line">+------+-----+------+------+</span><br><span class="line">2 rows in set (0.00 sec)</span><br></pre></td></tr></table></figure>
+
+<h5 id="3-COMPACT行格式"><a href="#3-COMPACT行格式" class="headerlink" title="3. COMPACT行格式"></a>3. COMPACT行格式</h5><p><img src="https://images.effiu.cn/blog/mysql/1.png" alt="Compact行格式示意图"></p>
+<p>一条完整的记录可以分为<strong>记录的额外信息</strong>和<strong>记录的真实数据</strong>两部分。</p>
+<h6 id="1-记录的额外信息"><a href="#1-记录的额外信息" class="headerlink" title="1. 记录的额外信息"></a>1. 记录的额外信息</h6><p>这是服务器为了描述这条记录而添加的额外信息。分为3类：<strong>变长字段长度列表</strong>、<strong>NULL值列表</strong>和<strong>记录头信息</strong>。</p>
+<ol>
+<li><p>变长字段长度列表</p>
+<p><code>MySQL</code>支持一些变长的数据类型，例如<code>VARCHAR(M)</code>、<code>VARBINARY(M)</code>、各种<code>TEXT</code>类型，各种<code>BLOG</code>类型。因为变长字段中存储的字节数据不固定，所以我们存储真实数据时需要把数据占用的字节数存起来。</p>
+<ul>
+<li>真正的数据内容</li>
+<li>占用的字节数</li>
+</ul>
+<p>在<code>Compact</code>行格式中，把所有变长字段的真实数据占用的字节长度存放在记录的开头部位，形成了<strong>变长字段长度列表</strong>，各变长字段数据占用的字节数按照列的顺序<font color='red'>逆序存放</font>。</p>
+<p>表<code>record_format_demo</code>表中<code>c1</code>、<code>c2</code>、<code>c4</code>都是<code>VARCHAR(10)</code>类型，且都是变长类型，所以这3列都需要存储到变长字段长度列表中。又因为是采用<code>ASCII</code>字符集，所以每个字符需要1各字节。所以其在变长字段长度列表中为<code>01 03 04</code>。</p>
+<table>
+<thead>
+<tr>
+<th align="center">列名</th>
+<th align="center">存储内容</th>
+<th align="center">内容长度（十进制表示）</th>
+<th align="center">内容长度（十六进制表示）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center"><code>c1</code></td>
+<td align="center"><code>&#39;aaaa&#39;</code></td>
+<td align="center"><code>4</code></td>
+<td align="center"><code>0x04</code></td>
+</tr>
+<tr>
+<td align="center"><code>c2</code></td>
+<td align="center"><code>&#39;bbb&#39;</code></td>
+<td align="center"><code>3</code></td>
+<td align="center"><code>0x03</code></td>
+</tr>
+<tr>
+<td align="center"><code>c4</code></td>
+<td align="center"><code>&#39;d&#39;</code></td>
+<td align="center"><code>1</code></td>
+<td align="center"><code>0x01</code></td>
+</tr>
+</tbody></table>
+<p>在变长字段长度列表中具体采用1个字节还是2个字节存储长度，根据真实数据占用的字节数判断。</p>
+<p>假设一个字符最多使用字节数<code>W</code>，例如<code>utf8</code>是3个字节,<code>ascii</code>是1个字节,<code>gbk</code>是两个字节。对于<code>VARCHAR(M)</code>来说，最多可以存储<code>M</code>个字符，所以对多存储字节数是<code>W*M</code>。假设实际存储占用字节数是<code>L</code>。</p>
+<ul>
+<li><p>当<code>M*W &lt;= 255</code>时，使用1个字节表示真正的字符占用字节数</p>
+</li>
+<li><p>当<code>M*W &gt; 255 </code>时，有两种情况：</p>
+<ul>
+<li>若<code>L &lt;= 127</code>，则使用1个字节表示真正字符占用字节数</li>
+<li>若<code>L &gt; 127</code>，则使用2个字节表示真正字符占用字节数</li>
+</ul>
+<blockquote>
+<p>127是2^7，占7位，该字节的第一个二进制字节位用来表示某个字节是单独的字段长度还是半个字段长度。</p>
+</blockquote>
+</li>
+</ul>
+<p>综上所述，当<code>M*W &gt; 255</code>且<code>L &gt; 127</code>时，使用2个字节表示真正字符占用字节数，否则使用1个字节表示真正字符占用字节数。</p>
+<blockquote>
+<p>变长字段列表中只存储<strong>非NULL</strong>列内容占用长度，所以变长字段列表内容排列如下：</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/blog/mysql/2.png" alt="存储格式"></p>
+</li>
+</ol>
+<p>​    <code>c3</code>列是<code>CHAR(10)</code>是定长列，对于定长字符列来说，该列不会被加入到变长字段列表中。</p>
+<ol start="2">
+<li><p>NULL值列表</p>
+<p><code>MySQL</code>中列允许存储<code>NULL</code>值，但若把<code>NULL</code>值存储到记录的真实数据中会非常占用空间，所以<code>Compact</code>行格式把<code>NULL</code>值统一管理起来，存储到<code>NULL</code>值列表中。其过程如下:</p>
+<ul>
+<li>统计表中允许<code>NULL</code>值的列</li>
+<li>若表中没有允许<code>NULL</code>值的列，则<code>NULL</code>值列表不存在，否则每个允许<code>NULL</code>值的列对应一个二进制位，二进制位按照列的顺序逆序排列，<code>1</code>表示该列位<code>NULL</code>,<code>0</code>表示列值不为<code>NULL</code>。</li>
+<li><code>NULL</code>值列表必须用整数字节表示，不足整数字节则高位补<code>0</code>，例如，表中有9列允许<code>NULL</code>，则<code>NULL</code>值列表占两个字节，且高位补<code>0</code>。</li>
+</ul>
+<p>所以<code>record_format_demo</code>表内两条数据示意图如下:</p>
+<p><img src="https://images.effiu.cn/blog/mysql/3.png" alt="数据示意图"></p>
+</li>
+<li><p>记录头信息</p>
+<p>由固定的5个字节组成。5个字节即40个二进制位，不同位代表不同的意思，如下图：</p>
+<p><img src="https://images.effiu.cn/blog/mysql/4.png" alt="记录头信息"></p>
+<blockquote>
+<p>以下是其详细描述，不需要了解</p>
+</blockquote>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th align="center">大小(bit)</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>预留位1/2</td>
+<td align="center">1</td>
+<td>未被使用</td>
+</tr>
+<tr>
+<td><code>delete_mask</code></td>
+<td align="center">1</td>
+<td>标记该记录是否被删除</td>
+</tr>
+<tr>
+<td><code>min_rec_mask</code></td>
+<td align="center">1</td>
+<td>B+树的每层非叶子节点中最小记录都会添加该标记</td>
+</tr>
+<tr>
+<td><code>n_owned</code></td>
+<td align="center">4</td>
+<td>表示当前记录拥有的记录数</td>
+</tr>
+<tr>
+<td><code>heap_no</code></td>
+<td align="center">13</td>
+<td>表示当前记录在记录堆中的位置信息</td>
+</tr>
+<tr>
+<td><code>record_type</code></td>
+<td align="center">3</td>
+<td>记录的类型,0:普通记录;1:B+树非叶子节点记录;2:最小记录;3:最大记录</td>
+</tr>
+<tr>
+<td><code>next_record</code></td>
+<td align="center">16</td>
+<td>下一条记录的相对位置</td>
+</tr>
+</tbody></table>
+<h6 id="2-记录的真实数据"><a href="#2-记录的真实数据" class="headerlink" title="2. 记录的真实数据"></a>2. 记录的真实数据</h6><p><code>MySQL</code>会为每列添加一些隐藏列，具体如下：<a name='hiddenColumn'></a></p>
+<table>
+<thead>
+<tr>
+<th>列名</th>
+<th align="center">是否必须</th>
+<th align="center">占用空间</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DB_ROW_ID</code></td>
+<td align="center">否</td>
+<td align="center">6个字节</td>
+<td>行ID，唯一标识一条记录</td>
+</tr>
+<tr>
+<td><code>DB_TRX_ID</code></td>
+<td align="center">是</td>
+<td align="center">6个字节</td>
+<td>事务ID</td>
+</tr>
+<tr>
+<td><code>DB_ROLL_PTR</code></td>
+<td align="center">是</td>
+<td align="center">7个字节</td>
+<td>回滚指针</td>
+</tr>
+</tbody></table>
+<p>从上表中可以得出，<code>DB_TRX_ID</code>和<code>DB_ROLL_PTR</code>这两个隐藏列是必须的，而<code>DB_ROW_ID</code>是可选的。</p>
+<p><strong style='color:red'><code>InnoDB</code>存储引擎对表主键的生成策略</strong>：优先使用用户自定义主键，若没有则选取一个<code>Unique</code>键作为主键，否则<code>InnoDB</code>会默认为表生成<code>DB_ROW_ID</code>隐藏列作为主键。</p>
+<p><img src="https://images.effiu.cn/blog/mysql/5.png" alt="表数据结构"></p>
+<blockquote>
+<p>综上所述，表数据结构如上。第一条数据的C3列，<code>CHAR(10)</code>，所以占用10个字节空间。不足用空格填充。第二条数据的<code>c3</code>、<code>c4</code>列，在<code>NULL</code>值列表中。</p>
+</blockquote>
+<h5 id="4-Redundant行格式"><a href="#4-Redundant行格式" class="headerlink" title="4. Redundant行格式"></a>4. Redundant行格式</h5><p><code>Mysql 5.0</code>之前使用的一种行格式，非常古老。</p>
+<h5 id="5-行溢出数据"><a href="#5-行溢出数据" class="headerlink" title="5. 行溢出数据"></a>5. 行溢出数据</h5><h6 id="1-列最多存储的数据"><a href="#1-列最多存储的数据" class="headerlink" title="1. 列最多存储的数据"></a>1. 列最多存储的数据</h6><p>对于<code>VARCHAR(M)</code>类型的列，最多存储65535(2^16)个字节，<code>M</code>表示最多存储的字符数量，当使用<code>ascii</code>字符集的话，一个字符代表一个字节：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; <span class="function">CREATE TABLE <span class="title">varchar_size_demo</span><span class="params">(</span></span></span><br><span class="line"><span class="function"><span class="params">    -&gt;     c VARCHAR(<span class="number">65535</span>)</span></span></span><br><span class="line"><span class="function">    -&gt; ) CHARSET</span>=ascii ROW_FORMAT=Compact;</span><br><span class="line">ERROR <span class="number">1118</span> (<span class="number">42000</span>): Row size too large. The maximum row size <span class="keyword">for</span> the used table type, not counting BLOBs, is <span class="number">65535.</span> This includes storage overhead, check the manual. You have to change some columns to TEXT or BLOBs</span><br></pre></td></tr></table></figure>
+
+<p>上述SQL报错，说明65535超过<code>MySQL</code>最大存储空间限制了，除了<code>BLOG</code>和<code>TEXT</code>列之外，其他所有列占用的字节长度均不能超过65535个字节。报错中提示<code>This includes storage overhead</code>，是因为除了记录本身数据之外，还会存储一些其他数据</p>
+<ul>
+<li>真实数据</li>
+<li>展示数据占用字节长度，长度最大为65535，所以数据长度占用2个字节</li>
+<li><code>NULL</code>标识，如果该列有<code>NOT NULL</code>属性，则可以没有这部分存储空间，占用1个字节</li>
+</ul>
+<blockquote>
+<p>当列用<code>NOT NULL</code>标识，则真实数据最大为<code>65533</code>，否则最大为<code>65532</code></p>
+<p>当字符集非<code>ascii</code>时，可存储字符数<code>M</code>取决与一个字符最多需要的字节数<code>W</code></p>
+</blockquote>
+<h6 id="2-记录数据太大产生溢出"><a href="#2-记录数据太大产生溢出" class="headerlink" title="2. 记录数据太大产生溢出"></a>2. 记录数据太大产生溢出</h6><p><font color='red'>溢出的原因</font>： <code>MySQL</code>中磁盘和内存交互的基本单位是<strong>页</strong>，<code>MySQL</code>是以页为基本单位管理存储空间的，记录也是以存储到页中的，一页大小是<code>16KB</code>。即<code>16*1024</code>字节，而<code>VARCHAR(M)</code>最多存储<code>65532</code>个字节，这就产生了一页存储不了数据的情况。</p>
+<p><font color='red'>解决方案</font>：在<code>Compact</code>和<code>Reduntant</code>行格式中，对于存储空间大的列，在<strong>记录真实数据处</strong>的地方，只会存储该列的部分数据，把剩余数据存储到其余几页中，然后在<strong>记录真实数据处</strong>用20个字节指向这些页的地址等信息，超出<strong>真实数据处</strong>的部分被称为<code>溢出页</code></p>
+<blockquote>
+<p>所有数据类型当数据很长时都会发生<strong>行溢出</strong>。</p>
+</blockquote>
+<h6 id="3-溢出的临界点"><a href="#3-溢出的临界点" class="headerlink" title="3. 溢出的临界点"></a>3. 溢出的临界点</h6><blockquote>
+<p>当存储多少字节时就会发生<code>行溢出</code>呢？</p>
+</blockquote>
+<ul>
+<li><code>MySQL</code>规定每页中最少存储两条记录</li>
+<li>每页除了存放记录之外，还会存储一些额外信息，占用132个字节空间</li>
+<li>每个记录的额外信息时27个字节<ul>
+<li>2个字节用于存储真实数据的长度</li>
+<li>1个字节用于存储列是否是NULL值</li>
+<li>5个字节大小的头信息</li>
+<li>6个字节的<code>row_id</code>列</li>
+<li>6个字节的<code>transaction_id</code>列</li>
+<li>7个字节的<code>roll_pointer</code>列</li>
+</ul>
+</li>
+</ul>
+<p><code>132 + (27 + n) * 2 &lt; 16*1024</code>，得出<code>n=8099</code>，得出当存储数据小于<code>8099</code>个字节时不会发生溢出。</p>
+<h5 id="5-Dynamic和Compressed行格式"><a href="#5-Dynamic和Compressed行格式" class="headerlink" title="5. Dynamic和Compressed行格式"></a>5. Dynamic和Compressed行格式</h5><p><code>Dynamic</code>与<code>Compact</code>类似，但在<font color='red'>行溢出</font>时直接把所有字节存储到其他页面中，只在记录真实数据存储其他页面地址。</p>
+<p><code>Compressed</code>行格式和<code>Dynamic</code>不同的一点是，<code>Compressed</code>行格式会采用压缩算法对页面进行压缩，以节省空间。</p>
+<h5 id="6-总结"><a href="#6-总结" class="headerlink" title="6. 总结"></a>6. 总结</h5><ol>
+<li><strong>页</strong>是<code>MySQL</code>数据库磁盘和内存交互的基本单位，也是<code>MySQL</code>管理存储空间的基本单位。</li>
+<li><code>InnoDB</code>定义了4种行格式<ul>
+<li><code>COMPACT</code></li>
+<li><code>Reduntant</code></li>
+<li><code>Dynamic</code></li>
+<li><code>Compressed</code></li>
+</ul>
+</li>
+<li>一页大小<code>16KB</code>，当记录种数据太多时，会发生<code>行溢出</code>现象。</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/MySQL/" rel="tag"># MySQL</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/14/jvm/7_jvm_class_load/" rel="prev" title="虚拟机类加载">
+      <i class="fa fa-chevron-left"></i> 虚拟机类加载
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/17/mysql/5_innodb_index_page_structure/" rel="next" title="InnoDB INDEX 页结构">
+      InnoDB INDEX 页结构 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

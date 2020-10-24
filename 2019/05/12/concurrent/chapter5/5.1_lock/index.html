@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="1. 锁 锁是用来控制多个线程访问共享资源的方式，一个锁可以防止多个线程同时访问共享资源，有些锁可以允许多个线程并发的访问共享资源，例如读写锁。 Java SE 5 之后新增了java.util.concurrent.locks.Lock接口用来实现锁功能。它提供了与synchronized关键字类似的同步功能，但是在使用时需要显式获取和释放锁，虽然没有了隐式获取和释放锁的便捷性，但是拥有了获取与">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Lock接口">
+<meta property="og:url" content="https://www.effiu.cn/2019/05/12/concurrent/chapter5/5.1_lock/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="1. 锁 锁是用来控制多个线程访问共享资源的方式，一个锁可以防止多个线程同时访问共享资源，有些锁可以允许多个线程并发的访问共享资源，例如读写锁。 Java SE 5 之后新增了java.util.concurrent.locks.Lock接口用来实现锁功能。它提供了与synchronized关键字类似的同步功能，但是在使用时需要显式获取和释放锁，虽然没有了隐式获取和释放锁的便捷性，但是拥有了获取与">
+<meta property="og:locale">
+<meta property="article:published_time" content="2019-05-12T07:26:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/05/12/concurrent/chapter5/5.1_lock/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Lock接口 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E9%94%81"><span class="nav-number">1.</span> <span class="nav-text">1. 锁</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E9%98%9F%E5%88%97%E5%90%8C%E6%AD%A5%E5%99%A8"><span class="nav-number">2.</span> <span class="nav-text">2. 队列同步器</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#2-1-%E9%98%9F%E5%88%97%E5%90%8C%E6%AD%A5%E5%99%A8%E7%9A%84%E6%8E%A5%E5%8F%A3%E4%B8%8E%E7%A4%BA%E4%BE%8B"><span class="nav-number">2.1.</span> <span class="nav-text">2.1 队列同步器的接口与示例</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/05/12/concurrent/chapter5/5.1_lock/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Lock接口
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-05-12 15:26 15:26:00" itemprop="dateCreated datePublished" datetime="2019-05-12T15:26:00+08:00">2019-05-12 15:26</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/05/12/concurrent/chapter5/5.1_lock/" class="post-meta-item leancloud_visitors" data-flag-title="Lock接口" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/05/12/concurrent/chapter5/5.1_lock/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/05/12/concurrent/chapter5/5.1_lock/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h5 id="1-锁"><a href="#1-锁" class="headerlink" title="1. 锁"></a>1. 锁</h5><blockquote>
+<p>锁是用来控制多个线程访问共享资源的方式，一个锁可以防止多个线程同时访问共享资源，有些锁可以允许多个线程并发的访问共享资源，例如读写锁。</p>
+<p><strong>Java SE 5</strong> 之后新增了<code>java.util.concurrent.locks.Lock</code>接口用来实现锁功能。它提供了与<code>synchronized</code>关键字类似的同步功能，但是在使用时需要显式获取和释放锁，虽然没有了隐式获取和释放锁的便捷性，但是拥有了获取与释放锁的可操作性、可中断的获取锁以及超时获取锁等多种<code>synchronized</code>没有的同步特性。其使用如下：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Lock lock = <span class="keyword">new</span> ReentrantLock();</span><br><span class="line"><span class="comment">// 写在try语句外面，防止获取锁时发生了异常，异常抛出后会导致锁无故释放。</span></span><br><span class="line">lock.lock();</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="comment">// 业务代码</span></span><br><span class="line">&#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">    <span class="comment">// 保证获取到锁后最终能够释放</span></span><br><span class="line">    lock.unlock();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>java.util.concurrent.locks.Lock</code>接口提供的<code>synchronized</code>不具备的特性。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">特性</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">非阻塞地获取锁</td>
+<td align="center">线程尝试获取锁，若此时没有线程获取到，则成功获取并持有锁</td>
+</tr>
+<tr>
+<td align="center">能被中断地获取锁</td>
+<td align="center">与<code>synchronized</code>不同，获取到锁的线程能够响应中断，中断时会抛出异常并释放锁</td>
+</tr>
+<tr>
+<td align="center">超时获取锁</td>
+<td align="center">在指定时间之前获取锁，超时后放弃获取锁并返回</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><code>java.util.concurrent.locks.Lock</code>，定义了锁的获取与释放的基本操作，API如下：</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">方法名称</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">void lock()</td>
+<td>调用线程会获取锁，获取成功后返回</td>
+</tr>
+<tr>
+<td align="center">void lockInterruptibly() throws InterruptedException</td>
+<td>可中断地获取锁，锁的获取中可以中断当前线程</td>
+</tr>
+<tr>
+<td align="center">boolean tryLock()</td>
+<td>尝试非阻塞的获取锁，调用后立即返回，<strong>true</strong>则获取成功，否则返回<strong>false</strong></td>
+</tr>
+<tr>
+<td align="center">boolean tryLock(long time, TimeUnit unit) throws InterruptedException</td>
+<td>超时获取锁，以下三种情况会返回：<br />① 线程在超时时间内获取到锁<br />② 线程在超时时间内被中断<br />③ 超时时间结束，返回false</td>
+</tr>
+<tr>
+<td align="center">void unlock()</td>
+<td>释放锁</td>
+</tr>
+<tr>
+<td align="center">Condition newCondition()</td>
+<td>获取等待通知组件，和当前的锁绑定，当前线程只有获取到锁，才能调用组件的<code>wait()</code>方法，而调用后，当前线程释放锁</td>
+</tr>
+</tbody></table>
+<h5 id="2-队列同步器"><a href="#2-队列同步器" class="headerlink" title="2. 队列同步器"></a>2. 队列同步器</h5><blockquote>
+<p>队列同步去<code>java.util.concurrent.locks.AbstractQueuedSynchronizer</code>（同步器），是用来构建锁或者其他同步组件的基础框架，其内部使用了一个int成员变量表示同步状态，通过内置的FIFO队列完成资源获取线程的排队工作。</p>
+</blockquote>
+<blockquote>
+<p><strong>同步器的主要使用方式是继承</strong>，子类通过继承同步器并实现其抽象方法来管理同步状态。子类被推荐定义为自定义同步组件的静态内部类，同步器自身没有实现任何同步接口，仅仅定义了若干同步状态的获取和释放的方法供自定义同步组件使用，即可以支持独占式获取同步状态，也可以支持共享式获取同步状态。</p>
+</blockquote>
+<blockquote>
+<p><strong>同步器实现锁的关键</strong>，是在锁的实现中聚合同步器，利用同步器实现锁的语义。</p>
+</blockquote>
+<ul>
+<li>锁是面向使用者的，定义了使用者与锁交互的接口，隐藏了实现细节</li>
+<li>同步器面向的是锁的实现者，它简化了锁的实现方式，屏蔽了同步状态管理、线程的排队、等待与唤醒底层操作。</li>
+</ul>
+<blockquote>
+<p>锁和同步器很好地隔离了使用者和实现者所需要关注的领域。</p>
+</blockquote>
+<h6 id="2-1-队列同步器的接口与示例"><a href="#2-1-队列同步器的接口与示例" class="headerlink" title="2.1 队列同步器的接口与示例"></a>2.1 队列同步器的接口与示例</h6><blockquote>
+<p>同步器的设计是基于模板方法模式的，使用者需要继承同步器并重写指定的方法，随后将同步器组合在自定义同步组件的实现中，并调用同步器提供的模板方法。修改同步状态的3个方法</p>
+</blockquote>
+<ul>
+<li><code>getState()</code>：获取当前同步状态</li>
+<li><code>setState(int newState)</code>：设置当前同步状态</li>
+<li><code>compareAndSetState(int expect, int update)</code>：使用CAS设置当前状态，可以保证同步状态设置的原子性。</li>
+</ul>
+<blockquote>
+<p>同步器可重写方法如下：</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">方法名称</th>
+<th align="left">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">protected boolean tryAcquire(int arg)</td>
+<td align="left">独占式获取到同步状态，实现该方法需要查询当前状态并判断同步状态是否符合预期，然后再进行CAS设置同步状态</td>
+</tr>
+<tr>
+<td align="center">protected boolean tryRelease(int arg)</td>
+<td align="left">独占式释放同步状态，等待获取同步状态的线程将有机会获取同步状态</td>
+</tr>
+<tr>
+<td align="center">protected int tryAcquireShared(int arg)</td>
+<td align="left">共享式获取同步状态，返回大于0的值，说明成功，否则失败</td>
+</tr>
+<tr>
+<td align="center">protected boolean tryReleaseShared(int arg)</td>
+<td align="left">共享式获取同步状态</td>
+</tr>
+<tr>
+<td align="center">protected boolean isHeldExclusively()</td>
+<td align="left">当前同步器是否在独占模式下被线程占用，一般用来表示是否被当前线程所独占</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>实现自定义同步组件时，将会调用同步器提供的模板方法，部分方法如下：</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">方法名称</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">void acquire(int arg)</td>
+<td>独占模式获取同步状态，如果当前线程获取同步状态成功，则由该方法返回，否则进入同步队列等待，该方法将会调用重写的<code>tryAcquire(int arg)</code>方法</td>
+</tr>
+<tr>
+<td align="center">void acquireInterruptibly(int arg)</td>
+<td>与<code>void acquire(int arg)</code>相同，但是该方法响应中断，在当前线程未获取到锁进入到同步队列等待后，如果当前线程被中断，则该方法会抛出<code>java.lang.InterruptedException</code>并返回</td>
+</tr>
+<tr>
+<td align="center">boolean tryAcquireNanos(int arg, long nanosTimeout)</td>
+<td>在<code>acquireInterruptibly(int arg)</code>的基础上增加了超时限制，如果当前线程在超时时间内没有获取到同步状态，将返回false，获取成功则返回true</td>
+</tr>
+<tr>
+<td align="center">void acquireShared(int arg)</td>
+<td>共享式获取同步状态，若当前线程未获取到同步状态，将会进入同步队列等待，与独占式获取的主要区别是在同一时刻可以有多个线程获取到同步状态</td>
+</tr>
+<tr>
+<td align="center">void acquireSharedInterruptibly(int arg)</td>
+<td>与<code>void acquireShared(int arg)</code>相同，该方法响应中断</td>
+</tr>
+<tr>
+<td align="center">boolean tryAcquireSharedNanos(int arg, long nanosTimeout)</td>
+<td>在<code>acquireSharedInterruptibly(int arg)</code>基础上增加了超时限制</td>
+</tr>
+<tr>
+<td align="center">boolean release(int arg)</td>
+<td>独占式是否同步状态，该方法会在释放同步状态之后，将同步队列中第一个节点包含的线程唤醒</td>
+</tr>
+<tr>
+<td align="center">boolean releaseShared(int arg)</td>
+<td>共享式释放同步状态</td>
+</tr>
+<tr>
+<td align="center">Collection<Thread> getQueuedThreads()</td>
+<td>获取等待在同步队列上的线程集合</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>同步器提供的模板方法有以下3类</p>
+</blockquote>
+<ul>
+<li>独占式获取与释放同步状态</li>
+<li>共享式获取与释放同步状态</li>
+<li>查询同步队列中等待线程的情况</li>
+</ul>
+<blockquote>
+<p>独占锁是同一时刻只能有一个线程获取到锁，而其他获取锁的线程只能处于同步队列中等待，只有获取到锁的线程释放了锁，后继的线程才能获取到锁，以下是示例代码：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 不可重入互斥锁类</span></span><br><span class="line"><span class="comment"> *  使用Mutex时，并不会与AQS交互，而是使用Mutex提供的方法获取与释放锁</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@author</span> zs</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@data</span> 2019-05-12</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@see</span> AbstractQueuedSynchronizer</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">Mutex</span> <span class="keyword">implements</span> <span class="title">Lock</span>, <span class="title">java</span>.<span class="title">io</span>.<span class="title">Serializable</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">Sync</span> <span class="keyword">extends</span> <span class="title">AbstractQueuedSynchronizer</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/**</span></span><br><span class="line"><span class="comment">         * 如果同步仅仅针对当前线程保持，返回true</span></span><br><span class="line"><span class="comment">         *</span></span><br><span class="line"><span class="comment">         * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">isHeldExclusively</span><span class="params">()</span> </span>&#123;</span><br><span class="line">            <span class="keyword">return</span> getState() == <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/**</span></span><br><span class="line"><span class="comment">         *  使用CAS设置同步状态</span></span><br><span class="line"><span class="comment">         * <span class="doctag">@param</span> state 同步状态</span></span><br><span class="line"><span class="comment">         * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">tryAcquire</span><span class="params">(<span class="keyword">int</span> state)</span> </span>&#123;</span><br><span class="line">            <span class="keyword">if</span> (compareAndSetState(<span class="number">0</span>, <span class="number">1</span>)) &#123;</span><br><span class="line">                setExclusiveOwnerThread(Thread.currentThread());</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/**</span></span><br><span class="line"><span class="comment">         * 将同步状态重置为0</span></span><br><span class="line"><span class="comment">         * <span class="doctag">@param</span> state</span></span><br><span class="line"><span class="comment">         * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">tryRelease</span><span class="params">(<span class="keyword">int</span> state)</span> </span>&#123;</span><br><span class="line">            <span class="keyword">if</span> (getState() == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="keyword">throw</span> <span class="keyword">new</span> IllegalMonitorStateException();</span><br><span class="line">            &#125;</span><br><span class="line">            setExclusiveOwnerThread(<span class="keyword">null</span>);</span><br><span class="line">            setState(<span class="number">0</span>);</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function">Condition <span class="title">newCondition</span><span class="params">()</span> </span>&#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">new</span> ConditionObject();</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">readObject</span><span class="params">(ObjectInputStream ois)</span> <span class="keyword">throws</span> IOException, ClassNotFoundException </span>&#123;</span><br><span class="line">            ois.defaultReadObject();</span><br><span class="line">            setState(<span class="number">0</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 将操作代理到Sync</span></span><br><span class="line"><span class="comment">     * 内部类继承了同步器并实现了独占锁式获取和释放同步状态</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Sync sync = <span class="keyword">new</span> Sync();</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">lock</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        sync.acquire(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">lockInterruptibly</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">        sync.acquireInterruptibly(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">tryLock</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> sync.tryAcquire(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">tryLock</span><span class="params">(<span class="keyword">long</span> time, TimeUnit unit)</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> sync.tryAcquireNanos(<span class="number">1</span>, unit.toNanos(time));</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">unlock</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        sync.release(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Condition <span class="title">newCondition</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> sync.newCondition();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">isLocked</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> sync.isHeldExclusively();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">hasQueuedThreads</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> sync.hasQueuedThreads();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/11/concurrent/chapter4/4.3_thread_application/" rel="prev" title="线程应用实例">
+      <i class="fa fa-chevron-left"></i> 线程应用实例
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/12/concurrent/chapter5/5.2_AQS_analysis/" rel="next" title="队列同步器">
+      队列同步器 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

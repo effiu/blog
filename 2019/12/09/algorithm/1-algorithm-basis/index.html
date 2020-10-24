@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="算法(algorithm)是任何良定义的计算过程，该过程取某个值或值的集合作为输入并产生某个值或值的集合作为输出，即把输入转换为输出的计算步骤的一个序列。也可以把算法当做用于求良解说明的计算问题的工具。一般问题陈述说明了期望的输入&#x2F;输出关系，而算法则描述一个特定的计算过程来实现该输入&#x2F;输出关系。 以插入排序说明了算法中的一些概念以及算法分析过程。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="algorithm 基础">
+<meta property="og:url" content="https://www.effiu.cn/2019/12/09/algorithm/1-algorithm-basis/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="算法(algorithm)是任何良定义的计算过程，该过程取某个值或值的集合作为输入并产生某个值或值的集合作为输出，即把输入转换为输出的计算步骤的一个序列。也可以把算法当做用于求良解说明的计算问题的工具。一般问题陈述说明了期望的输入&#x2F;输出关系，而算法则描述一个特定的计算过程来实现该输入&#x2F;输出关系。 以插入排序说明了算法中的一些概念以及算法分析过程。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/algorithm/01.jpg">
+<meta property="article:published_time" content="2019-12-09T15:15:00.000Z">
+<meta property="article:modified_time" content="2019-12-09T16:27:54.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="algorithm">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/algorithm/01.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/12/09/algorithm/1-algorithm-basis/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>algorithm 基础 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-algorithm"><span class="nav-number">1.</span> <span class="nav-text">1. algorithm</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E7%AE%97%E6%B3%95"><span class="nav-number">1.1.</span> <span class="nav-text">1. 算法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E7%AE%97%E6%B3%95%E5%9F%BA%E7%A1%80"><span class="nav-number">1.2.</span> <span class="nav-text">2. 算法基础</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E6%8F%92%E5%85%A5%E6%8E%92%E5%BA%8F"><span class="nav-number">1.2.1.</span> <span class="nav-text">1. 插入排序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E5%88%86%E6%9E%90%E7%AE%97%E6%B3%95"><span class="nav-number">1.2.2.</span> <span class="nav-text">2. 分析算法</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#%E6%8F%92%E5%85%A5%E6%8E%92%E5%BA%8F%E7%AE%97%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">1.2.2.0.1.</span> <span class="nav-text">插入排序算法分析</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#%E6%9C%80%E5%9D%8F%E6%83%85%E5%86%B5%E4%B8%8E%E5%B9%B3%E5%9D%87%E6%83%85%E5%86%B5%E5%88%86%E6%9E%90"><span class="nav-number">1.2.2.0.2.</span> <span class="nav-text">最坏情况与平均情况分析</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#%E5%A2%9E%E9%95%BF%E9%87%8F%E7%BA%A7"><span class="nav-number">1.2.2.0.3.</span> <span class="nav-text">增长量级</span></a></li></ol></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E9%80%89%E6%8B%A9%E6%8E%92%E5%BA%8F%E5%88%86%E6%9E%90%E8%BF%87%E7%A8%8B"><span class="nav-number">1.2.3.</span> <span class="nav-text">3. 选择排序分析过程</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E5%88%86%E6%B2%BB%E6%B3%95"><span class="nav-number">1.3.</span> <span class="nav-text">3. 分治法</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E5%BD%92%E5%B9%B6%E6%8E%92%E5%BA%8F"><span class="nav-number">1.3.1.</span> <span class="nav-text">1. 归并排序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E5%BD%92%E5%B9%B6%E6%8E%92%E5%BA%8F%E7%9A%84%E7%AE%97%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">1.3.2.</span> <span class="nav-text">2. 归并排序的算法分析</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-%E7%BB%83%E4%B9%A0%E9%A2%98"><span class="nav-number">1.4.</span> <span class="nav-text">4. 练习题</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/12/09/algorithm/1-algorithm-basis/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          algorithm 基础
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-12-09 23:15 23:15:00" itemprop="dateCreated datePublished" datetime="2019-12-09T23:15:00+08:00">2019-12-09 23:15</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-12-10 00:27 00:27:54" itemprop="dateModified" datetime="2019-12-10T00:27:54+08:00">2019-12-10 00:27</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/algorithm/" itemprop="url" rel="index"><span itemprop="name">algorithm</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/12/09/algorithm/1-algorithm-basis/" class="post-meta-item leancloud_visitors" data-flag-title="algorithm 基础" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/12/09/algorithm/1-algorithm-basis/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/12/09/algorithm/1-algorithm-basis/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>算法</strong>(algorithm)是任何良定义的计算过程，该过程取某个值或值的集合作为输入并产生某个值或值的集合作为输出，即把输入转换为输出的计算步骤的一个序列。也可以把算法当做用于<strong>求良解说明</strong>的<strong>计算问题</strong>的工具。一般问题陈述说明了期望的输入/输出关系，而算法则描述一个特定的计算过程来实现该输入/输出关系。</p>
+<p>以插入排序说明了算法中的一些概念以及算法分析过程。</p>
+<a id="more"></a>
+
+<h2 id="1-algorithm"><a href="#1-algorithm" class="headerlink" title="1. algorithm"></a>1. algorithm</h2><h3 id="1-算法"><a href="#1-算法" class="headerlink" title="1. 算法"></a>1. 算法</h3><p><strong>算法</strong>(algorithm)是任何良定义的计算过程，该过程取某个值或值的集合作为输入并产生某个值或值的集合作为输出，即把输入转换为输出的计算步骤的一个序列。也可以把算法当做用于<strong>求良解说明</strong>的<strong>计算问题</strong>的工具。一般问题陈述说明了期望的输入/输出关系，而算法则描述一个特定的计算过程来实现该输入/输出关系。</p>
+<p>许多程序将排序作为一个中间步，<strong>排序</strong>是计算机科学中的一个基本操作。现在已经有很多排序算法，排序算法的好坏依赖于以下因素：被排序的项数、这些项被稍微排序的程度、项值的可能限制、计算机的体系结构，以及使用的存储设备的种类(内存、磁盘等)。</p>
+<p>算法解决的并不仅仅是计算问题，算法在实际应用中无处不在。例如：</p>
+<ul>
+<li>给定一个交通图，找出从一个十字路口到另一个十字路口的最短道路。</li>
+<li>基因工程中，确定构成人类DNA的30亿个化学基对的序列，在数据库中存储这类信息并为数据分析开发工具。</li>
+<li>互联网使得全世界的人都可以快速访问与检索大量信息。借助于算法，互联网上的网站能够管理和处理这些海量数据。</li>
+<li>······</li>
+</ul>
+<p>上述问题共同点：存在许多候选解，但是绝大部分候选解都没有真正解决问题。寻找一个真正的解或一个最好的解可能是很大的挑战。算法解决的每个问题并不都有一个容易识别的候选解集。</p>
+<p><strong>算法是当代计算机中使用大多数技术的核心</strong>。</p>
+<h3 id="2-算法基础"><a href="#2-算法基础" class="headerlink" title="2. 算法基础"></a>2. 算法基础</h3><p><a target="_blank" rel="noopener" href="https://github.com/algorithm-visualizer/algorithm-visualizer">algorithm-visualizer</a>，一个算法可视化工具。</p>
+<h4 id="1-插入排序"><a href="#1-插入排序" class="headerlink" title="1. 插入排序"></a>1. <a name=insertSort></a>插入排序</h4><blockquote>
+<p>以<strong>插入排序</strong>为例，说明算法证明过程，以及相关概念，插入排序过程省略，<a target="_blank" rel="noopener" href="https://dev.tencent.com/u/effiu/p/essay-project/git/blob/master/src/main/java/com/effiu/essay/algorithm/sort/InsertSort.java">Insertion sort</a>其伪代吗如下所示：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 初始默认第一个数有序，数组为A</span></span><br><span class="line"><span class="keyword">for</span> i = <span class="number">1</span> to A.length - <span class="number">1</span></span><br><span class="line">	key = A[j]</span><br><span class="line">	<span class="comment">// 第一个无序的索引</span></span><br><span class="line">	j = i</span><br><span class="line">	<span class="keyword">while</span> i &gt; <span class="number">0</span> and A[i - <span class="number">1</span>] &gt; key</span><br><span class="line">		A[i] = A[i-<span class="number">1</span>]</span><br><span class="line">		i--</span><br><span class="line">    A[i] = key</span><br></pre></td></tr></table></figure>
+
+<p>假设数组为A，长度为n，那么每次迭代开始时A[0..i-1]是当前已经排序好的有序数组。把A[0..i-1]的这些性质形式的表示为<strong>循环不变式</strong>。<strong>循环不变式</strong>主要用来帮助我们理解算法的正确性，其必须证明三条性质：</p>
+<ul>
+<li><strong>初始化</strong>：循环的第一次迭代前，为真</li>
+<li><strong>保持</strong>：若循环的某次迭代前为真，那么下次迭代之前仍为真。</li>
+<li><strong>终止</strong>：循环终止时，不变式为我们提供了一个有用的性质，该性质有助于证明算法是正确的。</li>
+</ul>
+<p>当前两条成立时，在循环的每次迭代之前循环不变式为真。可以使用数学归纳法，为了证明某条性质成立，需要证明一个基本情况和一个归纳步。证明第一次迭代之前循环不变式成立对应于基本情况，证明从一次迭代到下一次迭代循环不变式成立对应于归纳步。</p>
+<p>第三条是最重要的，使用循环不变式证明其正确性。需要和导致循环终止的条件一起使用循环不变式。终止性不同于数学归纳法的做法，在归纳法中，归纳步是无限地使用的，当循环终止时，停止归纳。</p>
+<p>对于插入排序，其证明过程如下：</p>
+<ul>
+<li><strong>初始化</strong>：证明第一次循环之前(<code>i=1</code>)，循环不变式成立。有序数组由A[0]组成，有序。说明第一次迭代前循环不变式成立。</li>
+<li><strong>保持</strong>：证明每次迭代保持循环不变式。假设当前<code>for</code>循环执行到第i次。那么<code>while</code>循环会将A[i-1]、A[i-2]、A[i-3]等向右移动一个位置，之后将A[i]的值插入到该位置，这时子数组由原来的有序数组A[1..i-1]变成了A[1..i]，仍然有序。那么对于下一次迭代之前将<strong>保持循环不变式</strong>。上述过程可以用归纳详细说明。</li>
+<li><strong>终止</strong>：循环不变式终止的条件是迭代到数组最后一个元素。当迭代到最后一个元素时，说明A[1..n]有序。</li>
+</ul>
+<h4 id="2-分析算法"><a href="#2-分析算法" class="headerlink" title="2. 分析算法"></a>2. 分析算法</h4><p>分析算法的结果意味着预测算法需要的资源。虽然有时主要关系内存、通信带宽或计算机硬件等资源，但是绝大部分时候考虑的是<strong>计算时间</strong>。通过分析求解某个问题几种候选算法，我们可以选出一种最有效的算法，即使有时候可能不止一个可行的候选算法，但是往往可以抛弃几个较差的算法。</p>
+<p>分析算法之前，我们必须有一个要使用的“实现技术”的模型，包括描述所用资源及代价的模型。以单处理器计算模——RAM(random-access machine)来作为实现技术，RAM模型中，指令是一条接一条的执行，没有并发操作。</p>
+<p>RAM模型包含真实计算机中常见的指令，每条指令所需时间都为常量，具体指令如下：</p>
+<ul>
+<li><strong>算术指令</strong>，加、减、乘、除、取余、向下取整、向上取整</li>
+<li><strong>数据移动指令</strong>，装入、存储、复制</li>
+<li><strong>控制指令</strong>，条件与无条件转移、子程序调用与返回</li>
+</ul>
+<p>RAM模型中，数据类型包含整数型和浮点实数型。</p>
+<p>真实计算机中包含一些上面未列出的指令，例如：<strong>指数运算指令</strong>，其一般情况下执行所需时间非常量，但是在某些情况下，指数运算是一个常量操作，使用位运算左移k位等价于将该整数乘以$2^k$，所以当k足够小时，将把$2^k$的计算作为一个常量时间的操作。</p>
+<p>RAM模型中，并没有对当代计算机中常见的内存层次进行建模，即没有对高速缓存和虚拟内存进行建模。但是RAM模型通常能够很好地预测实际计算机上的性能。</p>
+<p>RAM模型即使分析一个简单的算法也可能是一个挑战，需要数学工具可能包括组合学、概率论、代数技巧等，以及识别一个公式中最有意义的项的能力。对每个可能的输入，算法的行为可能不同，所以我们需要一种方法以简单的、易于理解的公式的形式总结那样的行为。</p>
+<hr>
+<h6 id="插入排序算法分析"><a href="#插入排序算法分析" class="headerlink" title="插入排序算法分析"></a>插入排序算法分析</h6><p>插入排序算法需要的时间依赖于输入：</p>
+<ul>
+<li>排序1000个数的时间比排序三个数需要更长的时间</li>
+<li>依赖于已被排序的程度，可能需要不同的时间排序两个相同规模的输入序列</li>
+</ul>
+<p>算法需要的实际与输入的规模同步增长，通常把一个程序<strong>运行时间</strong>描述成其<strong>输入规模</strong>的函数。</p>
+<p><strong>输入规模</strong>的概念依赖于研究的问题。例如：</p>
+<ul>
+<li>排序和傅里叶变换等，量度是输入中的项数</li>
+<li>两个数相乘，输入规模的最佳量度是用通常的二进制记号表示输入所需的总位数(乘法的量度以位数为量度)</li>
+<li>有时候需要用两个数描述输入规模，例如图，输入规模可以用该图中的定点数和边数描述。</li>
+</ul>
+<p><strong>运行时间</strong>，算法的运行时间是指执行的基本操作数或步数。定义“步”的概念以便尽量独立于机器，分析算法需要假定<strong>每行伪代码需要常量时间</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>INSERTION-SORT(A)</th>
+<th align="center">代价</th>
+<th>次数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>for i = 1 to A.length - 1</td>
+<td align="center">$c_1$</td>
+<td>n</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;key = A[j]</td>
+<td align="center">$c_2$</td>
+<td>n-1</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;j = i    // 第一个无序的索引</td>
+<td align="center">$c_3$</td>
+<td>n-1</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;while i &gt; 0 and A[i - 1] &gt; key</td>
+<td align="center">$c_4$</td>
+<td>$\sum^{n}_{j=2}{t_i}$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A[i] = A[i-1]</td>
+<td align="center">$c_5$</td>
+<td>$\sum^{n}_{j=2}(t_i-1)$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i–</td>
+<td align="center">$c_6$</td>
+<td>$\sum^{n}_{j=2}(t_i-1)$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;A[i] = key</td>
+<td align="center">$c_7$</td>
+<td>n-1</td>
+</tr>
+</tbody></table>
+<p>算法的运行时间是每条语句的执行时间之和。代价与次数求积之和为：</p>
+<p>$$<br>T(n) = c_1n + c_2(n-1) + c_3(n-1) + c_4\sum^{n}<em>{j=2}(t_i) + c_5\sum^{n}</em>{j=2}(t_i-1) + c_6\sum^{n}_{j=2}(t_i-1) + c_7(n-1)<br>$$<br>即使是给定规模的输入，一个算法的运行时间也可能依赖于给定的是该规模下哪个输入。在插入算法中，当输入数组以排好序，则会出现最佳情况，在第四行当 $j == i$ 时，有 $A[i-1] &lt;= key$。此时运行时间为：</p>
+<p>$$<br>\begin {align}<br>T(n) &amp;= c_1n + c_2(n-1) + c_3(n-1) + c_4(n-1) + c_7(n-1) \<br>     &amp;= (c_1 + c_2 + c_3 + c_4 + c_7)n - (c_2 + c_3 + c_4 + c_7)<br>\end {align}<br>$$<br>若输入数组已经反向排序，即按递减序排好序，则会导致最坏情况。必须将每个元素与整个以排序数组 $A[0..i-1]$ 中的每个元素进行比较，即当$i=1,2,3,4···，n-1$，有 $t_i = j$  (<strong>个人认为是</strong>$t_j = j-1$)。所以 $\sum^n_{j=2}j=\frac{n(n+1)}2-1$、$\sum^n_{j=2}{j-1}=\frac{n(n-1)}2$，此时插入算法的运行时间为：</p>
+<p>$$<br>\begin{align}<br>T(n) &amp;= c_1n + c_2(n-1) + c_3(n-1) + c_4(\frac{n(n+1)}2-1) + c_5\frac{n(n-1)}2 + c_6\frac{n(n-1)}2 + c_7(n-1) \ &amp;=(\frac{c_4 + c_5 + c_6}2)n^2 + (c_1 + c_2 + c_3 + c_7 + \frac{c_4}2 - \frac{c_5}2 - \frac{c_6}2)n - (c_2 + c_3 + c_4 + c_7)<br>\end{align}<br>$$<br>可以把最坏的情况表示为 $an^2 + bn + c$，其中a、b、c又依赖于语句代价$c_i$，所以其是$n$的二次函数。</p>
+<h6 id="最坏情况与平均情况分析"><a href="#最坏情况与平均情况分析" class="headerlink" title="最坏情况与平均情况分析"></a>最坏情况与平均情况分析</h6><p>上述分析插入排序的最佳情况与最坏情况。其实往往只需要求<strong>最坏运行时间</strong>。理由如下：</p>
+<ul>
+<li>一个算法的最坏运行时间给出了任何输入的运行时间的一个上界。</li>
+<li>某些算法，最坏情况经常出现。例如，当数据库检索一条特定信息时，若该信息不在数据库中出现，则检索算法的最坏情况将会经常出现。</li>
+<li>“平均”情况往往与最坏情况大致一样差。例如，上述插入排序中假定在有序子数组$A[1..i-1]$中的一半元素小于$A[i]$，那么平均来说，$t_j = \frac{j}2$，其时间约等于最坏情况的一半，同样是一个$n$的二次函数。</li>
+</ul>
+<p>只有在某些特定情况下，才会对算法的平均情况运行时间感兴趣。</p>
+<h6 id="增长量级"><a href="#增长量级" class="headerlink" title="增长量级"></a>增长量级</h6><p>上述分析过程中，我们使用了某些简化的抽象来使插入排序的分析更加容易：</p>
+<ul>
+<li>使用常量$c_j$表示执行时间代价忽略每条语句的实际代价</li>
+<li>这些常量提供了比我们真正需要的更多细节</li>
+<li>插入排序中，把最坏情况的运行时间表示为$an^2 + bn + c$，其中常量a、b、c依赖于语句代价$c_i$,不但忽略了实际的语句代价，也忽略了抽象的代价$c_i$。</li>
+</ul>
+<p>基于上述情况，我们做出了更简化的抽象：即对算法运行时间真正影响的是<strong>增长率</strong>或<strong>增长量级</strong>。当n非常大时，低阶项相对来说不重要，所以可以只考虑$an^2 + bn +c$中的$an^2$。也可以忽略重要项的常系数($an^2$中的$a$)，对于大的输入，确定计算效率时常量因子不如增长率重要。这时只剩下最重要项中的因子$n^2$，我们记插入排序具有最坏情况运行时间$\Theta(n^2)$。</p>
+<p>当一个算法的最坏情况运行时间比另一个算法更低的增长量级，那么通常认为前者更有效率。</p>
+<h4 id="3-选择排序分析过程"><a href="#3-选择排序分析过程" class="headerlink" title="3. 选择排序分析过程"></a>3. 选择排序分析过程</h4><p>选择排序描述(数组为A，长度为n)：</p>
+<ul>
+<li>从A中找出最小元素并将其与A[1]互换。</li>
+<li>在未排序序列中，找出最小元素，存放到排序序列的最小位置</li>
+<li>重复上述步骤</li>
+</ul>
+<p>选择排序伪代码如下：</p>
+<table>
+<thead>
+<tr>
+<th>SELECT-SORT(A)</th>
+<th align="center">代价</th>
+<th>次数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>for i = 0 to A.length - 1</td>
+<td align="center">$c_1$</td>
+<td>n</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;j = i</td>
+<td align="center">$c_2$</td>
+<td>n</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;for m = i + 1 to A.length - 1</td>
+<td align="center">$c_3$</td>
+<td>$\sum^{n-1}_{j=1}t_m$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if A[m] &lt; A[j]</td>
+<td align="center">$c_4$</td>
+<td>$\sum^{n-1}_{j=1}t_m$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;j = m</td>
+<td align="center">$c_5$</td>
+<td>$\sum^{n-1}_{j=1}t_m$</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;if j != i</td>
+<td align="center">$c_6$</td>
+<td>n</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmp = A[j]</td>
+<td align="center">$c_7$</td>
+<td>n-1</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A[j] = A[i]</td>
+<td align="center">$c_8$</td>
+<td>n-1</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A[i] = tmp</td>
+<td align="center">$c_9$</td>
+<td>n-1</td>
+</tr>
+</tbody></table>
+<p>那么最坏情况下选择排序执行时间为：</p>
+<p>$$<br>\begin{align}<br>T(n) &amp;= c_1n+ c_2n + c_3(\frac{(n-1)n}2 + c_4\frac{(n-1)n}2 + c_5\frac{(n-1)n}2 + c_6n + c_7(n-1) + c_8(n-1) + c_9(n-1) \ &amp;= (\frac{c_3}2 + \frac{c_4}2 + \frac{c_5}2)n^2 + (c_1 + c_2 + c_6 + c_7 + c_8 + c_9 - \frac{c_3}2 - \frac{c_4}2 - \frac{c_5}2)n -3<br>\end{align}<br>$$<br>抽象简化为$an^2 + bn + c$，即时间复杂度为 $\Theta(n^2)$。</p>
+<h3 id="3-分治法"><a href="#3-分治法" class="headerlink" title="3. 分治法"></a>3. 分治法</h3><blockquote>
+<p>上一节中<a href='#insertSort'>插入排序</a>, 使用了<strong>增量</strong>序法，实际算法设置方法有很多。增量法: 在排子字数组$A[1..j-1]$后，将单个元素$A[j]$插入到指定位置，产生排序好的子数组$A[1..j]$。另一种设计方法是<strong>分治法</strong>，其最坏情况比插入排序少得多。</p>
+</blockquote>
+<p>分治法在结构上是<strong>递归的</strong>：为了解决一个问题，算法一次或者多次递归的调用其自身以解决紧密相关的若干自问题。<strong>分治法</strong>：将原问题分解为几个规模较小的问题，递归地求解这些问题，然后再合并这些子问题的解来建立原问题的解。其在递归时有以下三个步骤:</p>
+<ul>
+<li><strong>分解</strong>，将原问题分解为若干子问题，其是原问题的规模较小的实例</li>
+<li><strong>解决</strong>，递归地求解子问题。当子问题规模很小时，则直接求解</li>
+<li><strong>合并</strong>，合并这些子问题的解成原问题的解。</li>
+</ul>
+<h4 id="1-归并排序"><a href="#1-归并排序" class="headerlink" title="1. 归并排序"></a>1. 归并排序</h4><p>归并排序完全遵循分治模式，其可以理解为：</p>
+<ul>
+<li><strong>分解</strong>，将长度为$n$的待排序数组分为$n/2$个元素的两个子序列</li>
+<li><strong>解决</strong>，使用递归排序递归地排序两个子序列</li>
+<li><strong>合并</strong>，合并两个已排序的子序列已产生已排序的答案</li>
+</ul>
+<p>当排序的子序列长度为1时，递归开始回升，然后就需要合并两个子序列。代码见<a target="_blank" rel="noopener" href="https://dev.tencent.com/u/effiu/p/essay-project/git/blob/master/src/main/java/com/effiu/essay/algorithm/sort/MergingSort.java">归并排序</a>。</p>
+<h4 id="2-归并排序的算法分析"><a href="#2-归并排序的算法分析" class="headerlink" title="2. 归并排序的算法分析"></a>2. 归并排序的算法分析</h4><p>假设排序长度为$n$的数组需要$T(n)$的时间，那么归并排序一个元素需要常量的时间。当$n&gt;1$时，分解运行时间如下：</p>
+<ul>
+<li><strong>分解</strong>，分解过程主要是计算子数组的中间位置，需要常量的时间，即$D(n) = \theta(1)$。</li>
+<li><strong>解决</strong>，递归的求解两个规模为$n/2$的子问题，将贡献$2T(n/2)$的运行时间</li>
+<li><strong>合并</strong>，从代码中分析可得，具有$n$个元素的子数组merge需要$\theta(n)$的时间，即$C(n) = \theta(n)$</li>
+</ul>
+<p>$$<br>T(n) =<br>\begin{cases}\theta(1) &amp;若n=1\<br>2T(n/2) + \theta(n) + \theta(1) &amp;若n &gt; 1\end{cases}<br>$$</p>
+<p>后续会证明$T(n)=\theta(n\log n)$，$\log n = \log_2 n$，对数增长率比线性函数慢，所以对于足够大的输入，$\theta(n\log n)$的排序时间将比$\theta(n^2)$的效率快。其推导过程如下：</p>
+<p><img src="https://images.effiu.cn/blog/algorithm/01.jpg" alt="证明过程"></p>
+<p>第$i$层有$n/i$个节点，所以第$i$层的代价为$i * c(n/i) = cn$，总层数为$log n + 1$。当$n = 2^i$时，具有$i + 1$层。综上所述，归并排序的代价是$\theta(nlog n)$</p>
+<h3 id="4-练习题"><a href="#4-练习题" class="headerlink" title="4. 练习题"></a>4. 练习题</h3><ol>
+<li>说明归并排序在数组$A=[3,41,52,26,38,57,9,49]$上的操作？<a target="_blank" rel="noopener" href="https://dev.tencent.com/u/effiu/p/essay-project/git/blob/master/src/main/java/com/effiu/essay/algorithm/chapter2/Exercise2.java">归并排序</a></li>
+<li>使用数学归纳法证明：当$n$刚好为2的幂时，以下递归的解是$T(n) = n log n$。</li>
+</ol>
+<p>$$<br>T(n) =<br>\begin{cases} 2 &amp;若n=2\<br>2T(n/2) + n &amp;若n = 2^k, k &gt; 1 \end{cases}<br>$$</p>
+<ol start="3">
+<li>把插入排序表示为一个递归的过程。为了排序$A[1..n]$，我们递归地排序$A[1..n-1]$，然后把$A[n]$插入已排序的数组$A[1..n-1]$。为插入排序的这个递归版本的最坏情况运行时间写一个递归式。</li>
+<li>若序列A有序，就可以将该序列的中点与$v$进行比较。根据比较结果，原序列中有一半就可以不用再做进一步的考虑。<strong>二分查找</strong>就是重复这个过程，每次将序列剩余部分减半。为二分查找写出迭代或者递归的代码。证明：二分查找最坏情况运行时间为$\theta(lgn)$。</li>
+<li>上面<a href="#insertSort">插入排序</a>中，<code>while</code>循环采用一种线性查找反向扫描已排序好的子数组$A[1..j-1]$。我们可以使用二分查找来把插入排序的最坏情况改进到$\theta(n log n)$么？</li>
+<li>描述一个运行时间为$\theta(n log n)$的算法，给定$n$个整数的集合$S$和另一个整数$x$，该算法能确定$S$中是否存在两个其和刚好为$x$的元素?</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/algorithm/" rel="tag"># algorithm</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/09/22/java/java_io/" rel="prev" title="Java IO">
+      <i class="fa fa-chevron-left"></i> Java IO
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/" rel="next" title="Java Web 请求过程">
+      Java Web 请求过程 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

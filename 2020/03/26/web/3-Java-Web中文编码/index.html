@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="编码问题一直是开发人员经常遇到的问题，尤其是Java，因为Java是跨平台语音，而不同平台之间的编码切换非常多。对于国内的程序员更甚，因为还要转换成汉语。  编码格式的区别 要编码的场景 中文编码问题的原因以及如何解决 Java Web开发中可能会存在编码的几个地方 一个HTTP请求怎么控制编码格式">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java Web中文编码">
+<meta property="og:url" content="https://www.effiu.cn/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="编码问题一直是开发人员经常遇到的问题，尤其是Java，因为Java是跨平台语音，而不同平台之间的编码切换非常多。对于国内的程序员更甚，因为还要转换成汉语。  编码格式的区别 要编码的场景 中文编码问题的原因以及如何解决 Java Web开发中可能会存在编码的几个地方 一个HTTP请求怎么控制编码格式">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/05.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/22.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/23.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/24.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/25.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/26.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/27.png">
+<meta property="article:published_time" content="2020-03-25T17:09:00.000Z">
+<meta property="article:modified_time" content="2020-03-29T08:00:37.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/05.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Java Web中文编码 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E5%B8%B8%E8%A7%81%E7%9A%84%E7%BC%96%E7%A0%81%E6%A0%BC%E5%BC%8F"><span class="nav-number">1.</span> <span class="nav-text">1. 常见的编码格式</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Java%E4%B8%AD%E9%9C%80%E8%A6%81%E7%BC%96%E7%A0%81%E7%9A%84%E5%9C%BA%E6%99%AF"><span class="nav-number">2.</span> <span class="nav-text">2. Java中需要编码的场景</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-I-O%E6%93%8D%E4%BD%9C%E4%B8%AD%E7%9A%84%E7%BC%96%E7%A0%81"><span class="nav-number">2.1.</span> <span class="nav-text">1. I&#x2F;O操作中的编码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%86%85%E5%AD%98%E4%B8%AD%E7%9A%84%E7%BC%96%E7%A0%81"><span class="nav-number">2.2.</span> <span class="nav-text">2. 内存中的编码</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Java%E4%B8%AD%E5%A6%82%E4%BD%95%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="nav-number">3.</span> <span class="nav-text">3. Java中如何编解码</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Java-Web%E4%B8%AD%E6%B6%89%E5%8F%8A%E7%9A%84%E7%BC%96%E7%A0%81"><span class="nav-number">4.</span> <span class="nav-text">4. Java Web中涉及的编码</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-URL%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="nav-number">4.1.</span> <span class="nav-text">1. URL编解码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-HTTP-Header%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="nav-number">4.2.</span> <span class="nav-text">2. HTTP Header编解码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-POST%E8%A1%A8%E5%8D%95%E7%9A%84%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="nav-number">4.3.</span> <span class="nav-text">3. POST表单的编解码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-HTTP-BODY%E7%9A%84%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="nav-number">4.4.</span> <span class="nav-text">4. HTTP BODY的编解码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-%E5%85%B6%E4%BB%96%E9%9C%80%E8%A6%81%E7%BC%96%E7%A0%81%E7%9A%84%E5%9C%B0%E6%96%B9"><span class="nav-number">4.5.</span> <span class="nav-text">5. 其他需要编码的地方</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-%E4%B9%B1%E7%A0%81%E9%97%AE%E9%A2%98%E5%88%86%E6%9E%90"><span class="nav-number">5.</span> <span class="nav-text">5. 乱码问题分析</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E4%B8%AD%E6%96%87%E5%AD%97%E7%AC%A6%E6%94%B9%E5%8F%98"><span class="nav-number">5.1.</span> <span class="nav-text">1. 中文字符改变</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E4%B8%AD%E6%96%87%E6%88%90%E4%BA%86%E7%9C%8B%E4%B8%8D%E6%87%82%E7%9A%84%E5%AD%97%E7%AC%A6"><span class="nav-number">5.2.</span> <span class="nav-text">2. 中文成了看不懂的字符</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-GBK%E7%BC%96%E7%A0%81ISO-8859-1%E8%A7%A3%E7%A0%81"><span class="nav-number">5.2.1.</span> <span class="nav-text">1. GBK编码ISO-8859-1解码</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-UTF-8%E7%BC%96%E7%A0%81ISO-8859-1%E8%A7%A3%E7%A0%81"><span class="nav-number">5.2.2.</span> <span class="nav-text">2. UTF-8编码ISO-8859-1解码</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E6%B1%89%E5%AD%97%E5%8F%98%E6%88%90%E9%97%AE%E5%8F%B7"><span class="nav-number">5.3.</span> <span class="nav-text">3. 汉字变成问号</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-%E6%80%BB%E7%BB%93"><span class="nav-number">6.</span> <span class="nav-text">6. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java Web中文编码
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-03-26 01:09 01:09:00" itemprop="dateCreated datePublished" datetime="2020-03-26T01:09:00+08:00">2020-03-26 01:09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-03-29 16:00 16:00:37" itemprop="dateModified" datetime="2020-03-29T16:00:37+08:00">2020-03-29 16:00</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/" class="post-meta-item leancloud_visitors" data-flag-title="Java Web中文编码" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>编码问题一直是开发人员经常遇到的问题，尤其是Java，因为Java是跨平台语音，而不同平台之间的编码切换非常多。对于国内的程序员更甚，因为还要转换成汉语。</p>
+<ul>
+<li>编码格式的区别</li>
+<li>要编码的场景</li>
+<li>中文编码问题的原因以及如何解决</li>
+<li>Java Web开发中可能会存在编码的几个地方</li>
+<li>一个HTTP请求怎么控制编码格式</li>
+</ul>
+<a id="more"></a>
+
+<h2 id="1-常见的编码格式"><a href="#1-常见的编码格式" class="headerlink" title="1. 常见的编码格式"></a>1. 常见的编码格式</h2><p><code>byte</code>是计算机中的一个基本存储单元，其无法一一表示人类的语言，所以必须要经过翻译，才能让计算机理解我们的语言，这个编译过程就是编码。</p>
+<p>计算机提供了多种编码方式，<strong>ASCII</strong>、<strong>ISO-8859-1</strong>、<strong>GB2312</strong>、<strong>GBK</strong>、<strong>UTF-8</strong>、<strong>UTF-16</strong>等。其中支持汉子的有<strong>GB2312</strong>、<strong>GBK</strong>、<strong>UTF-8</strong>、<strong>UTF-16</strong>，按照这些编码规则就可以让计算机正确表示我们的字符。</p>
+<ol>
+<li><p>ASCII码</p>
+<p>ASCII码共有128个，用1个字节的低7位表示。0～31表示控制字符，如换行、回车、删除等；32～127是打印字符，如0～9，a～z，A~Z等</p>
+</li>
+<li><p>ISO-8859-1</p>
+<p>ISO组织在ASCII的基础上扩展了ASCII码，其涵盖了大部分西欧字符。ISO-8859-1是单字节编码，共256个。</p>
+</li>
+<li><p>GB2312</p>
+<p>GB2312是双字节编码，总编码范围是A1～F7。A1～A9是符号区，共包含682个字符，B0～F7是汉子区，共包含6763个汉字</p>
+</li>
+<li><p>GBK</p>
+<p>扩展了GB2312，加入了更多的汉字。其编码范围是8140～FEFE(去掉XX7F)，共23940个码位，能表示21003个汉字，其兼容GB2312</p>
+</li>
+<li><p>UTF-16</p>
+<p>UTF-16具体定义了Unicode字符在计算机中的存取方法，UTF-16用两个字节表示Unicode的转化格式，采用定长的方法，即任何字符都占用两个字节</p>
+</li>
+<li><p>UTF-8</p>
+<p>UTF-16用两个字节的定长方法表示字符，虽然简单、方便，但是很多字符用一个字节就可以表示，这大大浪费了存储空间，这在目前带宽有限的情况下会增大网络传输的流量。UTF-8采用了变长技术，每个编码区域有不同的编码长度，不同类型的字符可以由1～4个字节组成。编码规则如下：</p>
+<ul>
+<li>若是1个字节，最高位为0，则表示这是一个ASCII字符(00~7F)。UTF-8兼容ASCII码</li>
+<li>若是1个字节，以11开头，则连续的1表示这个字符的字节数</li>
+<li>若是1个字节，以10开头，表示非首字节，则需要向前查找才能得到当前字符的首字节</li>
+</ul>
+</li>
+</ol>
+<h2 id="2-Java中需要编码的场景"><a href="#2-Java中需要编码的场景" class="headerlink" title="2. Java中需要编码的场景"></a>2. Java中需要编码的场景</h2><h3 id="1-I-O操作中的编码"><a href="#1-I-O操作中的编码" class="headerlink" title="1. I/O操作中的编码"></a>1. I/O操作中的编码</h3><p>涉及到编码的地方都是在字节与字符之间的转换发生的，所以主要场景是IO上，包括磁盘IO和网络IO。</p>
+<p><img src="https://images.effiu.cn/blog/web/05.png" alt="png"></p>
+<p><code>Reader</code>类是Java IO中读字符的父类，而<code>InputStream</code>是读字节的父类，<code>InputStreamReader</code>是字节与字符之间的桥梁，其负责处理读取字节到字符的转换，对于具体字节到字符的解码实现，其又委托<code>StreamDecoder</code>完成，在解码过程中必须由用户指定<code>charset</code>编码格式。默认使用系统本地的字符集，中文环境是<strong>GBK</strong>。下面是编码和解码的例子：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">String filePath = <span class="string">&quot;/Users/zhangshuai/Desktop/test.txt&quot;</span>;</span><br><span class="line">String charset = <span class="string">&quot;UTF-8&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="comment">// 写入</span></span><br><span class="line">	FileOutputStream fos = <span class="keyword">new</span> FileOutputStream(filePath);</span><br><span class="line">    OutputStreamWriter writer = <span class="keyword">new</span> OutputStreamWriter(fos, charset);</span><br><span class="line">    writer.write(<span class="string">&quot;这仅仅是一个测试&quot;</span>);</span><br><span class="line">    writer.flush();</span><br><span class="line">    <span class="comment">// 读取</span></span><br><span class="line">    FileInputStream fis = <span class="keyword">new</span> FileInputStream(filePath);</span><br><span class="line">    InputStreamReader reader = <span class="keyword">new</span> InputStreamReader(fis, charset);</span><br><span class="line">    StringBuilder builder = <span class="keyword">new</span> StringBuilder();</span><br><span class="line">    <span class="keyword">char</span>[] cs = <span class="keyword">new</span> <span class="keyword">char</span>[<span class="number">64</span>];</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">while</span> ((i = reader.read(cs)) != -<span class="number">1</span>) &#123;</span><br><span class="line">        builder.append(cs, <span class="number">0</span>, i);</span><br><span class="line">    &#125;</span><br><span class="line">    System.out.println(builder.toString());</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 省略资源关闭</span></span><br><span class="line">    </span><br><span class="line">&#125; <span class="keyword">catch</span> (FileNotFoundException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125; <span class="keyword">catch</span> (IOException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-内存中的编码"><a href="#2-内存中的编码" class="headerlink" title="2. 内存中的编码"></a>2. 内存中的编码</h3><p>Java 开发中除IO外，最常用的是内存中进行字节到字符的转换。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">byte</span>[] bytes = s.getBytes(charset);</span><br><span class="line">    String s1 = <span class="keyword">new</span> String(bytes, charset);</span><br><span class="line">    System.out.println(s1);</span><br><span class="line">&#125; <span class="keyword">catch</span> (UnsupportedEncodingException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="3-Java中如何编解码"><a href="#3-Java中如何编解码" class="headerlink" title="3. Java中如何编解码"></a>3. Java中如何编解码</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="comment">// 省略异常</span></span><br><span class="line"><span class="keyword">byte</span>[] bytes = s.getBytes(charset);</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://images.effiu.cn/blog/web/22.png" alt="png"></p>
+<p>首先根据<code>Charset.forName(String charName)</code>找到<code>Charset</code>类，然后根据<code>Charset</code>创建<code>CharsetEncoder</code>，每个编码方式都有自己的<code>CharsetEncoder</code>实现。然后调用<code>CharsetEncoder.encode</code>类对字符串进行编码。</p>
+<p>下图是<code>String.getBytes(charsetName)</code>的编码过程时序图：</p>
+<p><img src="https://images.effiu.cn/blog/web/23.png" alt="png"></p>
+<p>也是通过<code>charsetName</code>找到<code>Charset</code>类，然后根据编码集生成<code>CharsetEncoder</code>，<code>CharsetEncoder</code>是所有字符编码的父类，然后调用<code>CharsetEncoder.encode</code>进行编码。</p>
+<p>对于中文字符，GB2312、GBK、UTF-8、UTF-16都可以使用，其中GB2312与GBK规则类似，但是GBK范围更大，它能处理所有汉字字符，所以应该尽量选择GBK。UTF-16与UTF-8则是两种编码规则，UTF-16编码效率高，从字符到字节相互转换简单，进行字符串操作更好，适合在本地磁盘和内存之间使用，可以进行字符和字节之间的快速切换，但是<strong style='color:red'>UTF-16不适合在网络之间传输</strong>，因为网络传输容易损坏字节流，一旦发生将很难恢复，所以相比UTF-8更适合网络传输。UTF-8对ASCII字符采用单字节存储，另外单个字符损坏也不会影响后续的其他字符，编码效率介于GBK和UTF-16之间。</p>
+<h2 id="4-Java-Web中涉及的编码"><a href="#4-Java-Web中涉及的编码" class="headerlink" title="4. Java Web中涉及的编码"></a>4. Java Web中涉及的编码</h2><p>对于中文来说，有IO的地方就会有编码，IO操作会发生编码转换，而大部分乱码都是网络IO引起的。我们需要考虑两个问题：</p>
+<ol>
+<li><font color='red'>一段文本的实际大小应该如何计算</font>，例如，把整型数字1234567作为字符串处理，采用UTF-8将会占用7个字节(ASCII码范围)，采用UTF-16则会占用14个字节，但是若把其作为int存储则只会占用4个字节；我们压缩Cookie时，会选择不同的压缩算法，发现压缩后的字符数是减少了，但是字节数并没有减少。所谓的压缩只是将多个单字节通过编码转换为一个多字节。</li>
+<li><font color='red'>当我们计算机中的某个文本编辑器里输入汉字时，其到底是如何表示的</font>。计算机中所有的信息都是以0和1表示的，那么一个汉字是如何用0和1表示呢？Java中一个char是16个bit，2个字节，当汉字用char表示后，在内存中会占用相当于4个字节的空间。</li>
+</ol>
+<p>理解上面两个问题后，那么用户从一个浏览器发起一个HTTP请求后，需要存在编码的地方是URL、Cookie、Parameter。服务接受到请求后解析HTTP请求，其中URI、Cookie和POST表单都需要解码，甚至服务器端可能还需要读取数据库中的数据也会发生解码等等。当服务器处理完请求的数据后，需要将这写数据再编码，通过Socket发送到用户请求的浏览器里面，再经过浏览器编码成文本，这个过程最少发生2次编码、2次解码，若发生数据库行为，则会更多。</p>
+<p><img src="https://images.effiu.cn/blog/web/24.png" alt="HTTP请求过程的编码示例"></p>
+<h3 id="1-URL编解码"><a href="#1-URL编解码" class="headerlink" title="1. URL编解码"></a>1. URL编解码</h3><p>用户提交一个URL，这个URL可能含有中文，因此需要编码。一个URL由以下几个部分组成：</p>
+<p><img src="https://images.effiu.cn/blog/web/25.png" alt="URL组成部分"></p>
+<p>上图中的path部分和param部分都出现了中文，编码后结果如下：</p>
+<p><img src="https://images.effiu.cn/blog/web/26.png" alt="URL编码后"></p>
+<p>上图中可以发现，URI编码与参数编码不一致，这是GET请求。浏览器编码URL是将非ASCII码按照某种编码格式编码成16进制数字后将每个16进制表示的字节前加上’%’。对URL的URI部分进行编码的字符集是在connector的<code>&lt;Connector URIEncoding=&quot;UTF-8&quot;/&gt;</code>中定义的，若未定义，那么将以默认编码<strong>ISO-8859-1</strong>解析。</p>
+<p>对于GET请求参数的解析：GET请求和POST请求的表单参数都是作为<strong>Parameter</strong>保存的，都通过<code>request.getParameter</code>获取参数值。其解码过程发生在第一次调用<code>request.getParameter</code>时，其在第一次被调用时将会调用<code>org.apache.catalina.connector.Request</code>的<code>parseParameter</code>方法，这个方法将会对GET和POSt方式传递的参数进行解码，但是它们的解码字符集可能不一样。GET请求的解码字符集是通过HTTP的Header传到服务端的，其与对URI编码的字符集不一致。对参数的编码字符集要么从Header中得到，要么是默认的ISO-8859-1。若要使用Header中<strong>ContentType</strong>中定义的编码，要将connector中的<code>&lt;Connector URIEncoding=&quot;UTF-8&quot; useBodyEncodingForURI=&quot;true&quot;/&gt;</code>。</p>
+<p>URL编码解码是比较复杂的，所以我们尽量在URL中使用非ASCII码字符，否则可能会出现乱码问题。服务端也要设置<code>&lt;Connector URIEncoding=&quot;UTF-8&quot; useBodyEncodingForURI=&quot;true&quot;/&gt;</code></p>
+<h3 id="2-HTTP-Header编解码"><a href="#2-HTTP-Header编解码" class="headerlink" title="2. HTTP Header编解码"></a>2. HTTP Header编解码</h3><p>当客户端发起一个HTTP请求时，除URL外，还可以能header中携带信息，如Cookie等，所以也会存在编码问题。对Header的编码是在第一次调用<code>request.getHeader</code>时进行的，其是调用<code>org.apache.tomcat.util.buf.MessageBytes.toString</code>方法，使用<strong>ISO-8859-1</strong>将byte编码为char的，没有办法设置Header的编码方式，所以若Header中出现非ASCII编码方式，则会出现乱码。    </p>
+<p>若一定要传递中文，则需要使用<code>URLEncode.encode</code>将中文字符编码成<strong>ASCII</strong>，在加入到Header中，然后由服务器进行<strong>URLDecode</strong>。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 查看解析header源码</li>
+</ul>
+<h3 id="3-POST表单的编解码"><a href="#3-POST表单的编解码" class="headerlink" title="3. POST表单的编解码"></a>3. POST表单的编解码</h3><p>POST表单提交的参数的解码也是在第一次调用<code>request.getParameter()</code>时发生的，POST参数是通过body传给服务端的，我们在浏览器中提交代码时，首先根据<code>contentType</code>定义的<strong>charset</strong>将参数编码，提交到服务端后同样会用<code>ContentType</code>中的<strong>charset</strong>解码。我们也可以通过<code>request.setCharacterEncoding()</code>设置编码格式。但是一定要在<code>request.getParameter()</code>之前设置，否则不起作用。若<code>contentType</code>没有设置编码方式，那么表单将会按照系统默认的编码方式解析。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 查看解析post参数的源码</li>
+</ul>
+<h3 id="4-HTTP-BODY的编解码"><a href="#4-HTTP-BODY的编解码" class="headerlink" title="4. HTTP BODY的编解码"></a>4. HTTP BODY的编解码</h3><p>当用户请求的资源成功获取后，将会通过<strong>response</strong>返回给客户端浏览器。这个过程先要经过服务器编码，再到浏览器解码。编解码字符集可以通过<code>response.setCharacterEncoding()</code>来设置，其也会服务<code>request.setCharacterEncoding</code>的值，会通过<strong>response</strong>的<strong>header</strong>返回给客户端，浏览器也是根据header中的编码方式进行解码，若header中没有设置编码方式，那么浏览器将会根据HTML中的<code>&lt;meta HTTP-equiv=&quot;Content-Type&quot; content=&quot;text/html; charset=GBK&quot;/&gt;</code>中的charset来解码，若仍没有定义，那么将会使用浏览器默认编码方式解码。优先级：</p>
+<ul>
+<li>response header中的编码方式</li>
+<li>HTML中规定的编码方式</li>
+<li>浏览器默认的编码方式</li>
+</ul>
+<h3 id="5-其他需要编码的地方"><a href="#5-其他需要编码的地方" class="headerlink" title="5. 其他需要编码的地方"></a>5. 其他需要编码的地方</h3><ul>
+<li>XML文件中，<code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;&gt;</code></li>
+<li>JSP文件中，<code>&lt;%@page contentType=&quot;text/html;charset=UTF-8&quot;%&gt;</code></li>
+<li>JS中<ul>
+<li><code>escape()</code>，将ASCII字母、数字、标点符号之外的其他字符转化为Unicode编码值，且在编码值前加<code>%u</code></li>
+<li><code>encodeURI()</code>，用来对URL进行编码的函数，将整个URL中的字符除部分ASCII码外的字符进行UTF-8编码，在每个码值前加上<code>%</code></li>
+<li><code>encodingURIComponent()</code>，支持更少的ASCII码，常用于将一个url作为参数放到另一个url中。</li>
+</ul>
+</li>
+</ul>
+<h2 id="5-乱码问题分析"><a href="#5-乱码问题分析" class="headerlink" title="5. 乱码问题分析"></a>5. 乱码问题分析</h2><p>Java中涉及到IO的地方(网络IO和磁盘IO)，绝大部份都涉及到编码。那么遇到乱码问题如何处理呢？乱码出现在<code>char</code>到<code>byte</code>或者<code>byte</code>到<code>char</code>中编码和解码的字符集不一致导致的，甚至一次操作设计了多次编解码，更很难确定哪个环节出现问题。</p>
+<h3 id="1-中文字符改变"><a href="#1-中文字符改变" class="headerlink" title="1. 中文字符改变"></a>1. 中文字符改变</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">byte</span>[] bytes = s.getBytes(<span class="string">&quot;UTF-8&quot;</span>);</span><br><span class="line">    String s1 = <span class="keyword">new</span> String(bytes, <span class="string">&quot;GBK&quot;</span>);</span><br><span class="line">    System.out.println(s1);</span><br><span class="line">&#125; <span class="keyword">catch</span> (UnsupportedEncodingException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//输出结果</span></span><br><span class="line"><span class="keyword">this</span> is a 娴嬭瘯</span><br></pre></td></tr></table></figure>
+
+<p>“<strong>this is a 测试</strong>”对应的字符集如下：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th align="center">t</th>
+<th align="center">h</th>
+<th align="center">i</th>
+<th>s</th>
+<th align="center"></th>
+<th align="center">i</th>
+<th align="center">s</th>
+<th align="center"></th>
+<th align="center">a</th>
+<th align="center"></th>
+<th>测</th>
+<th>试</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>十进制</td>
+<td align="center">116</td>
+<td align="center">104</td>
+<td align="center">105</td>
+<td>115</td>
+<td align="center">32</td>
+<td align="center">105</td>
+<td align="center">115</td>
+<td align="center">32</td>
+<td align="center">97</td>
+<td align="center">32</td>
+<td>27979</td>
+<td>35797</td>
+</tr>
+<tr>
+<td>十六进制</td>
+<td align="center">0074</td>
+<td align="center">0068</td>
+<td align="center">0069</td>
+<td>0073</td>
+<td align="center">0020</td>
+<td align="center">0069</td>
+<td align="center">0073</td>
+<td align="center">0020</td>
+<td align="center">0061</td>
+<td align="center">0020</td>
+<td>6d4b</td>
+<td>8bd5</td>
+</tr>
+</tbody></table>
+<p>而测试两个字对应的GBK编码，<strong>测B2E2</strong>、<strong>试CAD4</strong>。但是Uncode和GBK字符集都包含“测试”两个字，只是位置不同，所以GBK把“测试”解码成了其他字。</p>
+<h3 id="2-中文成了看不懂的字符"><a href="#2-中文成了看不懂的字符" class="headerlink" title="2. 中文成了看不懂的字符"></a>2. 中文成了看不懂的字符</h3><h4 id="1-GBK编码ISO-8859-1解码"><a href="#1-GBK编码ISO-8859-1解码" class="headerlink" title="1. GBK编码ISO-8859-1解码"></a>1. GBK编码ISO-8859-1解码</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">byte</span>[] bytes = s.getBytes(<span class="string">&quot;GBK&quot;</span>);</span><br><span class="line">    String s1 = <span class="keyword">new</span> String(bytes, <span class="string">&quot;ISO-8859-1&quot;</span>);</span><br><span class="line">    System.out.println(s1);</span><br><span class="line">&#125; <span class="keyword">catch</span> (UnsupportedEncodingException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 输出结果</span></span><br><span class="line"><span class="keyword">this</span> is a ²âÊÔ</span><br></pre></td></tr></table></figure>
+
+<p>这是由于GBK编码后的结果。<strong>测B2E2</strong>、<strong>试CAD4</strong>可以拆分为4个字节。查看<strong>ISO-8859-1</strong>对照表可以发现：</p>
+<p>²对应B2、â对应E2、Ê对应CA、Ô对应D4。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 尝试用UTF-8编码，ISO-8859-1解码</li>
+</ul>
+<h4 id="2-UTF-8编码ISO-8859-1解码"><a href="#2-UTF-8编码ISO-8859-1解码" class="headerlink" title="2. UTF-8编码ISO-8859-1解码"></a>2. UTF-8编码ISO-8859-1解码</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">byte</span>[] bytes = s.getBytes(<span class="string">&quot;UTF-8&quot;</span>);</span><br><span class="line">    String s1 = <span class="keyword">new</span> String(bytes, <span class="string">&quot;ISO-8859-1&quot;</span>);</span><br><span class="line">    System.out.println(s1);</span><br><span class="line">&#125; <span class="keyword">catch</span> (UnsupportedEncodingException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://images.effiu.cn/blog/web/27.png" alt="png"></p>
+<p>从上图中可以发现，“测试”对应的<strong>UTF-8</strong>码值(十六进制)分别为：6d4b和8bd5，但是“测试”两个字经过UTF-8编码后为6个字节。查看UTF-8编码<code>sun.nio.cs.UTF_8</code>的<code>encode</code>方法源码：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">encode</span><span class="params">(<span class="keyword">char</span>[] var1, <span class="keyword">int</span> var2, <span class="keyword">int</span> var3, <span class="keyword">byte</span>[] var4)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> var5 = var2 + var3;</span><br><span class="line">    <span class="keyword">int</span> var6 = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> var7 = var6 + Math.min(var3, var4.length); var6 &lt; var7 &amp;&amp; var1[var2] &lt; <span class="number">128</span>; var4[var6++] = (<span class="keyword">byte</span>)var1[var2++]) &#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span>(var2 &lt; var5) &#123;</span><br><span class="line">        <span class="keyword">char</span> var8 = var1[var2++];</span><br><span class="line">        <span class="comment">// var8 小于 128则说明是ASCII，占用1个字节</span></span><br><span class="line">        <span class="keyword">if</span> (var8 &lt; <span class="number">128</span>) &#123;</span><br><span class="line">            <span class="comment">// 第一位是0</span></span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)var8;</span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (var8 &lt; <span class="number">2048</span>) &#123;</span><br><span class="line">            <span class="comment">// 128 ~ 2048，2^7 - 1 ~ 2^12 - 1，8到12位</span></span><br><span class="line">            <span class="comment">// 第一位是1,则1的个数表示所占的字节数, 192 = 128 + 64,即两个字节</span></span><br><span class="line">            <span class="comment">// 则第一个字节，11开头+取低6位之外的二进制值;第二个字节为10 + 低6位</span></span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">192</span> | var8 &gt;&gt; <span class="number">6</span>);</span><br><span class="line">            <span class="comment">// “&amp; 63”表示舍弃高位</span></span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var8 &amp; <span class="number">63</span>);</span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (Character.isSurrogate(var8)) &#123; </span><br><span class="line">            <span class="comment">// \uD800 ~ \uDFFF</span></span><br><span class="line">            <span class="keyword">if</span> (<span class="keyword">this</span>.sgp == <span class="keyword">null</span>) &#123;</span><br><span class="line">                <span class="keyword">this</span>.sgp = <span class="keyword">new</span> Parser();</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">int</span> var9 = <span class="keyword">this</span>.sgp.parse(var8, var1, var2 - <span class="number">1</span>, var5);</span><br><span class="line">            <span class="keyword">if</span> (var9 &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="keyword">if</span> (<span class="keyword">this</span>.malformedInputAction() != CodingErrorAction.REPLACE) &#123;</span><br><span class="line">                    <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">                var4[var6++] = <span class="keyword">this</span>.repl;</span><br><span class="line">            &#125; <span class="keyword">else</span>&#123;</span><br><span class="line">                <span class="comment">// 四个字节表示，每个字节种6位用于记录编码值</span></span><br><span class="line">                <span class="comment">// 1111 + </span></span><br><span class="line">                var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">240</span> | var9 &gt;&gt; <span class="number">18</span>);</span><br><span class="line">                var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var9 &gt;&gt; <span class="number">12</span> &amp; <span class="number">63</span>);</span><br><span class="line">                var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var9 &gt;&gt; <span class="number">6</span> &amp; <span class="number">63</span>);</span><br><span class="line">                var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var9 &amp; <span class="number">63</span>);</span><br><span class="line">                ++var2;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            <span class="comment">// </span></span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">224</span> | var8 &gt;&gt; <span class="number">12</span>);</span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var8 &gt;&gt; <span class="number">6</span> &amp; <span class="number">63</span>);</span><br><span class="line">            var4[var6++] = (<span class="keyword">byte</span>)(<span class="number">128</span> | var8 &amp; <span class="number">63</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> var6;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>“测”的<strong>UTF-8</strong>码值分别为6d4b，所以走最后的<code>else</code>代码，占3个字符。<code>6d4b</code>的二进制位<code>0110101101001010</code>共16位。</p>
+<ul>
+<li><code>&gt;&gt; 12</code>表示取高4位，首位1的个数位占字节数，所以<code>111</code>开头。<code>11100000</code>+ <code>0110</code> = <code>11100110</code>，带符号值为-26，即无符号位230，对应ISO-8859-1的: <code>æ</code>。</li>
+<li><code>&gt;&gt; 6 &amp; 63</code>，舍弃低6位后，取低中间6位。<strong>UTF-8</strong>非首位<code>10</code>开头，<code>10000000</code> + <code>101101</code> = <code>10101101</code>，带符号值为-75，即无符号位 181，对应ISO-8859-1的: <code>µ</code>。</li>
+<li><code>&gt;&gt; 63</code>，取低6位，即<code>10000000</code> + <code>001010</code> = <code>10001010</code>，带符号值为-117，即无符号位139，对应ISO-8859-1的：<code>‹</code>。</li>
+</ul>
+<h3 id="3-汉字变成问号"><a href="#3-汉字变成问号" class="headerlink" title="3. 汉字变成问号"></a>3. 汉字变成问号</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;this is a 测试&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">byte</span>[] bytes = s.getBytes(<span class="string">&quot;ISO-8859-1&quot;</span>);</span><br><span class="line">    String s1 = <span class="keyword">new</span> String(bytes, <span class="string">&quot;GBK&quot;</span>);</span><br><span class="line">    System.out.println(s1);</span><br><span class="line">&#125; <span class="keyword">catch</span> (UnsupportedEncodingException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 输出结果</span></span><br><span class="line"><span class="keyword">this</span> is a ??</span><br></pre></td></tr></table></figure>
+
+<p>将中文符号经过<strong>ISO-8859-1</strong>编码后，所有字符变成了？，这是因为ISO-8859-1编码时，遇到不在码值范围的统一用<strong>3f</strong>即**?**表示。</p>
+<h2 id="6-总结"><a href="#6-总结" class="headerlink" title="6. 总结"></a>6. 总结</h2><p>总结了几种常见的编码方式，介绍了支持中文的编码方式，比较了说明场景；其次介绍了Java中涉及到的编码问题，以及如果实现编码的支持，以网络IO为例，说明了HTTP请求过程中发生编码与解码的地方，最后说明了平时遇到的发生乱码问题的原因。</p>
+<p>要解决中文编码问题，首先要清楚哪些地方会引起字符到字节的编码，以及从字节到字符的编码。最常见的就是发生磁盘IO或者网络IO的时候；应该清楚发生编码行为的地方的原理或者系统是如何控制编码的。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/" rel="prev" title="Java I/O的工作机制(2)">
+      <i class="fa fa-chevron-left"></i> Java I/O的工作机制(2)
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/03/28/web/4-Javac%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86/" rel="next" title="Javac编译原理">
+      Javac编译原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

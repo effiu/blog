@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Redis是单线程程序。为什么单线程运行这么快？单线程如何处理高并发的客户端请求？答案是多路复用API。 Redis认为数据库的瓶颈不是网络流量而是内部逻辑，所以即使Redis使用了浪费流量的文本协议，依然有超高的访问性能。Redis将所有数据都放到内存中，用一个单线程对外提供服务，单个节点跑满CPU核心的情况下，甚至可以达到10w&#x2F;s的超高QPS。Redis的协议是**RESP(Redis Se">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis原理之IO模型与通信协议">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/25/redis/7_redis_principle/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Redis是单线程程序。为什么单线程运行这么快？单线程如何处理高并发的客户端请求？答案是多路复用API。 Redis认为数据库的瓶颈不是网络流量而是内部逻辑，所以即使Redis使用了浪费流量的文本协议，依然有超高的访问性能。Redis将所有数据都放到内存中，用一个单线程对外提供服务，单个节点跑满CPU核心的情况下，甚至可以达到10w&#x2F;s的超高QPS。Redis的协议是**RESP(Redis Se">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/19.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/20.png">
+<meta property="article:published_time" content="2019-08-24T16:28:00.000Z">
+<meta property="article:modified_time" content="2019-08-24T16:28:46.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/redis/19.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/25/redis/7_redis_principle/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Redis原理之IO模型与通信协议 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E7%BA%BF%E7%A8%8BIO%E6%A8%A1%E5%9E%8B"><span class="nav-number">1.</span> <span class="nav-text">1. 线程IO模型</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E9%9D%9E%E9%98%BB%E5%A1%9EIO"><span class="nav-number">1.1.</span> <span class="nav-text">1. 非阻塞IO</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E6%97%B6%E9%97%B4%E8%BD%AE%E8%AF%A2-%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8"><span class="nav-number">1.2.</span> <span class="nav-text">2. 时间轮询(多路复用)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E6%8C%87%E4%BB%A4%E9%98%9F%E5%88%97"><span class="nav-number">1.3.</span> <span class="nav-text">3. 指令队列</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E5%93%8D%E5%BA%94%E9%98%9F%E5%88%97"><span class="nav-number">1.4.</span> <span class="nav-text">4. 响应队列</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#5-%E5%AE%9A%E6%97%B6%E4%BB%BB%E5%8A%A1"><span class="nav-number">1.5.</span> <span class="nav-text">5. 定时任务</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE"><span class="nav-number">2.</span> <span class="nav-text">2. 通信协议</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-RESP"><span class="nav-number">2.1.</span> <span class="nav-text">1. RESP</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E6%9C%8D%E5%8A%A1%E7%AB%AF-gt-%E5%AE%A2%E6%88%B7%E7%AB%AF"><span class="nav-number">2.2.</span> <span class="nav-text">2. 服务端 -&gt; 客户端</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E6%80%BB%E7%BB%93"><span class="nav-number">2.3.</span> <span class="nav-text">3. 总结</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/25/redis/7_redis_principle/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Redis原理之IO模型与通信协议
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-08-25 00:28 00:28:00 / Modified: 00:28:46" itemprop="dateCreated datePublished" datetime="2019-08-25T00:28:00+08:00">2019-08-25 00:28</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/25/redis/7_redis_principle/" class="post-meta-item leancloud_visitors" data-flag-title="Redis原理之IO模型与通信协议" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/25/redis/7_redis_principle/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/25/redis/7_redis_principle/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Redis是单线程程序。为什么单线程运行这么快？单线程如何处理高并发的客户端请求？答案是<strong>多路复用API</strong>。</p>
+<p>Redis认为数据库的瓶颈不是网络流量而是内部逻辑，所以即使Redis使用了浪费流量的文本协议，依然有超高的访问性能。Redis将所有数据都放到内存中，用一个单线程对外提供服务，单个节点跑满CPU核心的情况下，甚至可以达到10w/s的超高QPS。Redis的协议是**RESP(Redis Serialiation Protocol)**。</p>
+<a id="more"></a>
+
+<h3 id="1-线程IO模型"><a href="#1-线程IO模型" class="headerlink" title="1. 线程IO模型"></a>1. 线程IO模型</h3><p>Redis是单线程程序，<strong>Node.js</strong>、<strong>nginx</strong>也是单线程程序，但其都是高性能的典范。</p>
+<p>Redis内所有数据都在内存中，所有运算都是内存级别的运算，所以尽快Redis是单线程程序，但是其仍然是高性能的，可以应对来着高并发的客户端请求。但是也要小心使用Redis指令，尤其是时间复杂度为O(n)的指令，例如：<code>scan</code>、<code>keys</code>，可能会导致Redis卡顿。</p>
+<h4 id="1-非阻塞IO"><a href="#1-非阻塞IO" class="headerlink" title="1. 非阻塞IO"></a>1. 非阻塞IO</h4><p>当我们调用套接字的读写方法时，默认是阻塞的。例如<code>read(n)</code>表示要传递n个字节，若当前一个字节没有，那么线程会阻塞，知道有新的数据到来或者连接关闭，线程才会继续执行。而<code>write</code>方法则一般不会阻塞，除非内核为套接字分配的缓冲区已满(<code>write</code>会阻塞，直到缓冲区中有空闲空间)。</p>
+<p><img src="https://images.effiu.cn/blog/redis/19.png" alt="非阻塞IO模型"></p>
+<p>非阻塞IO则在套接字基础上提供了一个选项<strong>Non_Blocking</strong>，当这个选项打开时，读写不会阻塞，而是能读多少算多少，能写多少算多少。读取上限取决于内核为套接字分配的读缓冲区内部数据字节数，写上限也是内核为套接字分配的写缓冲区空闲空间字节数。读方法和写方法都会通过返回值告知程序实际读写字节数。</p>
+<p>有了非阻塞IO意味着线程在读写IO时可以不必阻塞了，读写可以瞬间完成。</p>
+<h4 id="2-时间轮询-多路复用"><a href="#2-时间轮询-多路复用" class="headerlink" title="2. 时间轮询(多路复用)"></a>2. 时间轮询(多路复用)</h4><p>非阻塞IO通用存在问题，即线程读取数据，若读取一部分返回了，线程如何继续读。当数据来时，线程如何得到通知。写同样，当写缓冲区满了时，写不完，剩下的字节数何时才能继续写，线程也应该得到通知。</p>
+<p><img src="https://images.effiu.cn/blog/redis/20.png" alt="多路复用"></p>
+<p>时间轮询API就是解决上述问题的。最简单的轮询API是<code>select</code>函数，其是操作系统提供给用户的API。输入是读写描述符列表<code>read_fds &amp; write_fds</code>，输出是与之对应的可读可写的事件，同时提供了<code>timeout</code>参数，若没有任何事件到来，就立即返回；时间过了，没有任何事件到来，同样立即返回。拿到事件后线程会挨个处理相应的事件。处理完了继续轮询。线程处于一个死循环状态，称为事件循环，一次循环称为一个循环周期。</p>
+<p>通过<code>select</code>系统调用同时处理多个通道描述符的读写事件，因此将这类系统调用统称为多路复用API。现代操作系统的多路复用API已经不再使用<code>select</code>系统调用，而是<code>epoll(linux)</code>和<code>kqueue(fress &amp; macosx)</code>，<code>select</code>系统调用的性能在描述符特别多时性能会变差。但是其本质是一样的。</p>
+<p>服务端套接字<code>serversocket</code>对象的读操作是调用<code>accept</code>接受客户端新连接，其也是通过<code>select</code>系统调用读事件得到通知的。事件轮询API其实就是<strong>Java NIO</strong>技术。</p>
+<h4 id="3-指令队列"><a href="#3-指令队列" class="headerlink" title="3. 指令队列"></a>3. 指令队列</h4><p>Redis会将每个客户端套接字都关联一个指令队列。客户端的指令通过队列顺序处理。</p>
+<h4 id="4-响应队列"><a href="#4-响应队列" class="headerlink" title="4. 响应队列"></a>4. 响应队列</h4><p>Redis会为每个客户端套接字关联一个响应队列。Redis客户端通过响应队列将指令的返回结果返回给客户端。若队列为空，则说明连接暂时处于空闲状态，不需要获取事件，也可以将当前客户端描述符从<code>write_fds</code>中移除，等队列数据不为空，再将描述符放回。避免<code>select</code>系统调用立即返回写事件，而并没有返回结果，出现这种情况会立即飙高CPU</p>
+<h4 id="5-定时任务"><a href="#5-定时任务" class="headerlink" title="5. 定时任务"></a>5. 定时任务</h4><p>服务器要处理响应IO事件之外，还有其他事情。例如，若线程阻塞在<code>select</code>系统调用上，定时任务将无法得到准确的时间调度。那么定时器是如何解决的呢？</p>
+<p>Redis的定时任务会记录在一个最小堆的数据结构中，在这个堆中，最快要执行的任务排在堆的最上方。在每个循环周期中，Redis都会将最小堆中已经到点的任务立即进行处理。处理完成后，将最快要执行的任务还需要执行的时间记录下来，这个时间就是<code>select</code>系统调用的<code>timeout</code>参数。Redis知道未来<code>timeout</code>时间内，没有其他定时任务需要处理，所以可以阻塞<code>timeout</code>时间。</p>
+<h3 id="2-通信协议"><a href="#2-通信协议" class="headerlink" title="2. 通信协议"></a>2. 通信协议</h3><h4 id="1-RESP"><a href="#1-RESP" class="headerlink" title="1. RESP"></a>1. RESP</h4><p>RESP(Redis Serialiation Protocol)是Redis序列化协议的简写。其是一种直观的文本协议，优势是实现简单，解析性能好。Redis协议将传输的结构分为5种最小单元类型，单元结束是统一加上回车换行符号<code>\r\n</code>。具体如下：</p>
+<ul>
+<li>单行字符串以<code>+</code>符号开头</li>
+<li>多行字符串以<code>$</code>字符串开头，后面跟字符串长度</li>
+<li>整数值以<code>:</code>开头，后跟整数字符串形式</li>
+<li>错误消息以<code>-</code>符号开头</li>
+<li>数组以<code>*</code>开头，后跟数组的长度</li>
+</ul>
+<p>具体例子如下：</p>
+<ul>
+<li>单行字符串 hello world：<code>+hello world\r\n</code></li>
+<li>多行字符串 hello world：<code>$11\r\nhello world\r\n</code>。多行也可以表示单行</li>
+<li>整数 1024：<code>:1024\r\n</code></li>
+<li>错误 参数类型错误：<code>-WRONGTYPE Operation against a key holding the wrong kind of value\r\n</code></li>
+<li>数组 [1,2,3]：<code>*3\r\n:1\r\n:2\r\n:3\r\n</code></li>
+<li><code>NULL</code>用多行字符串表示，长度为-1：<code>$-1\r\n</code></li>
+<li>空串用多行字符串表示，长度为0：<code>$0\r\n\r\n</code>，<code>\r\n</code>中间隔的是空字符串</li>
+</ul>
+<h4 id="2-服务端-gt-客户端"><a href="#2-服务端-gt-客户端" class="headerlink" title="2. 服务端 -&gt; 客户端"></a>2. 服务端 -&gt; 客户端</h4><p>服务端向客户端回复的响应要支持多种数据结构，有5中基本类型：</p>
+<ul>
+<li><p>单行字符响应，如下：OK便是响应。即<code>+OK</code></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set x a</span><br><span class="line">OK</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>错误响应，如下</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; incr x</span><br><span class="line">(error) ERR value is not an integer or out of range</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>整数响应</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; incr a</span><br><span class="line">(integer) 1</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>多行字符串响应，使用双引号括起来的就是多行字符串响应</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; get a2</span><br><span class="line">&quot;x&quot;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>数组响应</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; keys a*</span><br><span class="line">1) &quot;a2&quot;</span><br><span class="line">2) &quot;a&quot;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>嵌套，如下：<code>scan</code>命令用来扫描服务器中包含的key列表以游标的形式获取，一次只获取一部分。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; scan 0 match a* count 10000</span><br><span class="line">1) &quot;7167&quot;</span><br><span class="line">2) 1) &quot;a&quot;</span><br><span class="line">   2) &quot;a2&quot;</span><br></pre></td></tr></table></figure>
+
+<p><code>scan</code>其返回的是一个嵌套数组。数组的第一个值是游标的值，值为0说明已经遍历完毕。否则可以使用这个游标继续遍历下去。数组的第二个值又是一个数组，即key值列表</p>
+</li>
+</ul>
+<h4 id="3-总结"><a href="#3-总结" class="headerlink" title="3. 总结"></a>3. 总结</h4><p>Redis协议中有大量冗余的回车换行符，但这不影响其是互联网技术领域中非常受欢迎的文本协议。很多开源项目适应RESP作为它的通信协议。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/Redis/" rel="tag"># Redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/24/redis/6_geohash_scan/" rel="prev" title="Redis GeoHash And Scan">
+      <i class="fa fa-chevron-left"></i> Redis GeoHash And Scan
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/25/redis/8_persistence_pipeline_transaction/" rel="next" title="Redis持久化、管道和事务">
+      Redis持久化、管道和事务 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

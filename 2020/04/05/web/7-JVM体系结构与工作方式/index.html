@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="JVM可以跨计算机体系结构来执行Java字节码，主要是由于JVM屏蔽了与各个计算机平台相关的软件或硬件之间的差异，使得平台相关的耦合统一由JVM提供者来实现。本节主要包括：  JVM的总体设计的体系结构 JVM的执行引擎的工作方式 执行引擎如何模拟JVM指令">
+<meta property="og:type" content="article">
+<meta property="og:title" content="JVM体系结构与工作方式">
+<meta property="og:url" content="https://www.effiu.cn/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="JVM可以跨计算机体系结构来执行Java字节码，主要是由于JVM屏蔽了与各个计算机平台相关的软件或硬件之间的差异，使得平台相关的耦合统一由JVM提供者来实现。本节主要包括：  JVM的总体设计的体系结构 JVM的执行引擎的工作方式 执行引擎如何模拟JVM指令">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/40.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/41.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/42.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/43.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/44.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/45.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/46.png">
+<meta property="article:published_time" content="2020-04-04T16:27:00.000Z">
+<meta property="article:modified_time" content="2020-07-03T07:54:20.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/40.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>JVM体系结构与工作方式 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84"><span class="nav-number">1.</span> <span class="nav-text">1. JVM体系结构</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-JVM"><span class="nav-number">1.1.</span> <span class="nav-text">1. JVM</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E4%BB%80%E4%B9%88%E6%98%AFJVM"><span class="nav-number">1.1.1.</span> <span class="nav-text">1. 什么是JVM</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%B8%AD%E7%9A%84%E6%8C%87%E4%BB%A4%E9%9B%86"><span class="nav-number">1.1.2.</span> <span class="nav-text">2. 计算机中的指令集</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E6%8C%87%E4%BB%A4%E9%9B%86%E4%B8%8E%E6%B1%87%E7%BC%96%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">1.1.3.</span> <span class="nav-text">3. 指令集与汇编的关系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E6%8C%87%E4%BB%A4%E9%9B%86%E4%B8%8ECPU%E6%9E%B6%E6%9E%84%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">1.1.4.</span> <span class="nav-text">4. 指令集与CPU架构的关系</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84"><span class="nav-number">1.2.</span> <span class="nav-text">2. JVM体系结构</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8"><span class="nav-number">1.2.1.</span> <span class="nav-text">1. 类加载器</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E"><span class="nav-number">1.2.2.</span> <span class="nav-text">2. 执行引擎</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-Java%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">1.2.3.</span> <span class="nav-text">3. Java内存管理</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-JVM%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">2.</span> <span class="nav-text">2. JVM工作机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E6%9C%BA%E5%99%A8%E6%89%A7%E8%A1%8C%E4%BB%A3%E7%A0%81"><span class="nav-number">2.1.</span> <span class="nav-text">1. 机器执行代码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-JVM%E4%B8%BA%E4%BB%80%E4%B9%88%E9%80%89%E6%8B%A9%E5%9F%BA%E4%BA%8E%E6%A0%88%E7%9A%84%E6%9E%B6%E6%9E%84"><span class="nav-number">2.2.</span> <span class="nav-text">2. JVM为什么选择基于栈的架构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E7%9A%84%E6%A1%86%E6%9E%B6%E8%AE%BE%E8%AE%A1"><span class="nav-number">2.3.</span> <span class="nav-text">3. 执行引擎的框架设计</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E7%9A%84%E6%89%A7%E8%A1%8C%E8%BF%87%E7%A8%8B"><span class="nav-number">2.4.</span> <span class="nav-text">4. 执行引擎的执行过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-JVM%E6%96%B9%E6%B3%95%E8%B0%83%E7%94%A8%E6%A0%88"><span class="nav-number">2.5.</span> <span class="nav-text">5. JVM方法调用栈</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-%E6%80%BB%E7%BB%93"><span class="nav-number">3.</span> <span class="nav-text">3. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          JVM体系结构与工作方式
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-04-05 00:27 00:27:00" itemprop="dateCreated datePublished" datetime="2020-04-05T00:27:00+08:00">2020-04-05 00:27</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-07-03 15:54 15:54:20" itemprop="dateModified" datetime="2020-07-03T15:54:20+08:00">2020-07-03 15:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/" class="post-meta-item leancloud_visitors" data-flag-title="JVM体系结构与工作方式" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>JVM可以跨计算机体系结构来执行Java字节码，主要是由于JVM屏蔽了与各个计算机平台相关的软件或硬件之间的差异，使得平台相关的耦合统一由JVM提供者来实现。本节主要包括：</p>
+<ul>
+<li>JVM的总体设计的体系结构</li>
+<li>JVM的执行引擎的工作方式</li>
+<li>执行引擎如何模拟JVM指令</li>
+</ul>
+<a id="more"></a>
+
+<h2 id="1-JVM体系结构"><a href="#1-JVM体系结构" class="headerlink" title="1. JVM体系结构"></a>1. JVM体系结构</h2><h3 id="1-JVM"><a href="#1-JVM" class="headerlink" title="1. JVM"></a>1. JVM</h3><h4 id="1-什么是JVM"><a href="#1-什么是JVM" class="headerlink" title="1. 什么是JVM"></a>1. 什么是JVM</h4><p>JVM，即Java虚拟机，通过模拟一个计算机来达到一个计算机所具有的计算功能。真实计算机(以计算为中心)的体系结构分为如下几个部分：</p>
+<ul>
+<li>指令集：计算机可以识别的机器语言的命令集合</li>
+<li>计算单元：能够识别且控制指令执行的功能模块</li>
+<li>寻址方式：地址的位数、最小地址和最大地址范围，以及地址的运行规则</li>
+<li>寄存器：包括操作数寄存器、变址寄存器、控制寄存器等的定义、数量和使用方式</li>
+<li>存储单元：能够存储操作数和保存操作结构的单元。如内核级缓存、内存和磁盘等。</li>
+</ul>
+<p>上述几个部分中与代码执行最密切的是指令集。<strong style='color:red'>指令集就是CPU中用来计算和控制计算机系统的一套指令的集合</strong>，每一种新型的CPU在设计时都规定了一系列与其他硬件电路相配合的指令系统。指令集的先进程度也关系到CPU的性能发挥，其是体现CPU性能的一个重要标志。</p>
+<h4 id="2-计算机中的指令集"><a href="#2-计算机中的指令集" class="headerlink" title="2. 计算机中的指令集"></a>2. 计算机中的指令集</h4><p>指令集从主流体系机构上可分为<strong>精简指令集</strong>(Reduced Instruction Set Computing,<strong>RISC</strong>)和<strong>复杂指令集</strong>(Complex Instruction Set Computing, <strong>CISC</strong>)。当前普遍使用的是复杂指令集，例如：<strong>x86</strong>架构的CPU是复杂指令集，Intel和AMD也开发出了很多扩展指令集，如MMX(Multi Media eXtension,多媒体扩展指令集)，其在处理多媒体数据时性能更强，还有AMD为提高3D处理性能的3DNow!指令集等。</p>
+<h4 id="3-指令集与汇编的关系"><a href="#3-指令集与汇编的关系" class="headerlink" title="3. 指令集与汇编的关系"></a>3. 指令集与汇编的关系</h4><p>指令集是可以被机器识别的机器码，也就是其必须以二进制格式存于计算机中。汇编语言是能够别人识别的指令，汇编语言在顺序和逻辑上是与机器指令一一对应的。汇编语言是为了让人们可以容易的记住机器指令而使用的助记符。大部分汇编指令都可以直接翻译成一条机器指令。例如<strong>MOVAX,1234H</strong>这条指令对应的机器码为<code>B83412</code>。</p>
+<h4 id="4-指令集与CPU架构的关系"><a href="#4-指令集与CPU架构的关系" class="headerlink" title="4. 指令集与CPU架构的关系"></a>4. 指令集与CPU架构的关系</h4><p>不同CPU的指令集会有不同。那么不同CPU的指令集是否兼容呢？例如Intel与AMD的CPU指令集是否兼容？当然是兼容的。汇编语言都是对寄存器和段的直接操作的命令，这些寄存器和段等芯片都是架构的一部分，不同的芯片架构设计一定会对应到不同的机器指令集合。虽然CPU的架构会影响指令集，但是现在芯片厂商都会采用兼容的方式兼容其他指令集。</p>
+<p><code>cat /proc/cpuinfo</code>可以查看linux系统支持的指令集</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">[root@vdevops ~]# cat /proc/cpuinfo </span><br><span class="line">processor       : 0</span><br><span class="line">vendor_id       : GenuineIntel</span><br><span class="line">cpu family      : 6</span><br><span class="line">model           : 79</span><br><span class="line">model name      : Intel(R) Xeon(R) CPU E5-2682 v4 @ 2.50GHz</span><br><span class="line">stepping        : 1</span><br><span class="line">microcode       : 0x1</span><br><span class="line">cpu MHz         : 2494.222</span><br><span class="line">cache size      : 40960 KB</span><br><span class="line">physical id     : 0</span><br><span class="line">siblings        : 1</span><br><span class="line">core id         : 0</span><br><span class="line">cpu cores       : 1</span><br><span class="line">apicid          : 0</span><br><span class="line">initial apicid  : 0</span><br><span class="line">fpu             : yes</span><br><span class="line">fpu_exception   : yes</span><br><span class="line">cpuid level     : 13</span><br><span class="line">wp              : yes</span><br><span class="line">flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl eagerfpu pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ibrs ibpb stibp fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm rdseed adx smap xsaveopt spec_ctrl intel_stibp</span><br><span class="line">bogomips        : 4988.44</span><br><span class="line">clflush size    : 64</span><br><span class="line">cache_alignment : 64</span><br><span class="line">address sizes   : 46 bits physical, 48 bits virtual</span><br><span class="line">power management:</span><br></pre></td></tr></table></figure>
+
+<p>JVM也有一套合适的指令集，这个指令集可以被JVM解析执行，即JVM字节码指令集，符合class规范的字节码都可以被JVM执行。</p>
+<ul>
+<li>一个抽象规范，这个规范约束类JVM到底是什么，有哪些组成部分</li>
+<li>一个具体的实现，所谓具体实现就是不同的厂商按照这个抽象的规范用软件或者软件和硬件结合的方式在相同或不同的平台上的具体实现</li>
+<li>一个运行中的实例，当其在一个平台上运行时，其就是一个运行中的实例，每个运行中的Java程序都是一个JVM实现。</li>
+</ul>
+<h3 id="2-JVM体系结构"><a href="#2-JVM体系结构" class="headerlink" title="2. JVM体系结构"></a>2. JVM体系结构</h3><p>JVM的结构基本上由4部分组成：</p>
+<ul>
+<li>类加载器，在JVM启动时或者在类运行时将需要的class加载到JVM中</li>
+<li>执行引擎，执行引擎的任务是负责执行class文件包含的字节码指令，相当于机器上的CPU</li>
+<li>内存区，将内存划分为若干个区以模拟实际机器上的存储、记录和调度功能模块，如实际机器上的各种功能的寄存器或者PC指针的记录器等</li>
+<li>本地方法调用，调用C或者C++实现的本地方法的代码返回结果</li>
+</ul>
+<p><img src="https://images.effiu.cn/blog/web/40.png" alt="JVM体系结构"></p>
+<h4 id="1-类加载器"><a href="#1-类加载器" class="headerlink" title="1. 类加载器"></a>1. 类加载器</h4><p>每个被JVM装载的类型都有一个对应的<code>java.lang.Class</code>类实例与之对应，该实例可以唯一表示被JVM装载的Class类，且其在Java堆中。<a href='https://www.effiu.cn/blog/2020/04/01/web/6-ClassLoader工作机制/'>ClassLoader工作机制</a></p>
+<h4 id="2-执行引擎"><a href="#2-执行引擎" class="headerlink" title="2. 执行引擎"></a>2. 执行引擎</h4><p>执行引擎是JVM的核心部分，执行引擎的作用是解析JVM字节码指令。在<strong>《Java虚拟机规范》</strong>中定义了执行每条指令应该处理什么，并且应该得到什么结果。但是并没有规定其实现过程。执行引擎采取什么方式实现由JVM的实现厂家自己去实现，无论直接解释执行还是采用JIT技术转成本地代码去执行，甚至采用寄存器实现都可以。执行引擎的具体实现有很大的发挥空间。</p>
+<p>现在流行的是SUN的hotspot是基于栈的执行引擎，而Google的Dalvik是基于寄存器的执行引擎。</p>
+<h4 id="3-Java内存管理"><a href="#3-Java内存管理" class="headerlink" title="3. Java内存管理"></a>3. Java内存管理</h4><p>执行引擎执行程序时需要存储一些东西，例如操作码需要的操作数，操作码的执行结果等。<code>class</code>字节码还有类的对象等信息都需要在执行引擎执行之前准备好。一个JVM实例包含方法区、Java堆、Java栈、PC寄存器和本地方法区。每个新的执行引擎实例被创建时都会创建一个Java栈、和一个PC寄存器，若当前在执行一个Java方法，那么在当前这个Java栈中保存的是该线程中方法调用的状态，包括方法的参数、局部变量、方法的返回值及运算的中间结果等。而PC寄存器会指向即将执行的下一条指令。</p>
+<p>若是本地方法调用，则存储在本地方法调用栈中或者特定实现中的某个内存区域。</p>
+<h2 id="2-JVM工作机制"><a href="#2-JVM工作机制" class="headerlink" title="2. JVM工作机制"></a>2. JVM工作机制</h2><h3 id="1-机器执行代码"><a href="#1-机器执行代码" class="headerlink" title="1. 机器执行代码"></a>1. 机器执行代码</h3><p>计算机只接受机器指令，<strong style='color:red'>高级语言必须经过编译器编译成机器指令才能被计算机正确执行</strong>。机器语言一般与平台密切相关，而高级语言屏蔽了所有底层的硬件甚至底层软件平台(操作系统)。高级语言之所以能屏蔽底层硬件架构的差异就是因为中间的转换环节，即编译环节。不同硬件平台一般需要的编译器也是不同的。目前，不同硬件平台的差异性已经被更上一层的软件平台(操作系统)代替了，因为操作系统几乎完全屏蔽了硬件平台，<strong style='color:red'>编译环节屏蔽了操作系统的差异性</strong>。</p>
+<p>通常的编译器是将高级语言直接编译成可执行的目标机器文件(实际上是某种操作系统中需要动态链接的目标二进制文件，例如Windows中是dynamic link library,DLL)。还有一些编译器是将高级语言编译成另外一种高级语言，或者是将低级语言编译成高级语言(反编译)，或者是将高级语言编译成虚拟机目标语言，例如Java编译器。</p>
+<p>通常一个程序从编写到执行会经历以下阶段:</p>
+<p>源代码(source code) -&gt; 预处理器(preprocessor) -&gt; 编译器(compiler) -&gt; 汇编程序(assembler) -&gt; 目标代码(object code) -&gt; 链接器(linker) -&gt; 可执行程序(executables)</p>
+<p><strong style='color:red'>编译器的作用就是把源代码变成可执行程序</strong>，即中间所有环节都是由编译器完成的。</p>
+<p>在linux平台下，通常一个软件安装要经过<code>configure</code>、<code>make</code>、<code>make install</code>、<code>make clean</code>4个环节。</p>
+<ul>
+<li><code>configure</code>为程序在当前操作系统下选择合适的编译器来编译程序代码，以及一些环境参数</li>
+<li><code>make</code>对程序代码进行编译操作，将源码编译成可执行的目标文件</li>
+<li><code>make install</code>将已经编译好的可执行文件安装到操作系统指定或者默认目录下</li>
+<li><code>make clean</code>删除编译时产生的临时文件</li>
+</ul>
+<p>那么如何让机器执行代码呢？无论是哪种指令集都只有几种最基本的元素：<strong>加</strong>、<strong>减</strong>、<strong>乘</strong>、<strong>求余</strong>、<strong>求模</strong>等。这些运算还可以继续分解成二进制位运算：<strong>与</strong>、<strong>或</strong>、<strong>异或</strong>等。这些运算可以通过指令完成，而指令的核心目的是确定需要运算的种类(操作码)和运算需要的数据(操作数)，以及从那里(寄存器或栈)获取操作数、将运算存放到什么地方(寄存器或栈)等。不同的操作方式又将指令划分成一地址指令、二地址指令、三地址指令和零地址指令等n地址指令。不同的指令集会有不同的架构实现。例如基于寄存器的架构实现和基于栈的架构实现。</p>
+<h3 id="2-JVM为什么选择基于栈的架构"><a href="#2-JVM为什么选择基于栈的架构" class="headerlink" title="2. JVM为什么选择基于栈的架构"></a>2. JVM为什么选择基于栈的架构</h3><p>JVM执行字节码指令是基于栈的机构，所有操作数必须先入栈，然后根据指令中的操作码选择从栈中弹出若干个元素进行计算后，再将结果压入栈中。JVM中操作数可以存放在每一个栈桢中的一个本地变量集中，即在每个方法调用时就会给这个方法分配一个本地变量集，本地变量集在编译时已经基本确定，所以操作数入栈可以直接是常量入栈或者从本地变量集中取一个变量压入栈中。</p>
+<p>基于栈的结构与基于寄存器的操作有所不同，一个操作数需要入栈和出栈，若要进行一个简单的加法运算，则需要2次入栈(本地变量入栈)和2次出栈(用于加法运算)，然后将结果入栈。若是基于寄存器的架构，则只需要将两个操作数存入寄存器进行加法运算后再将结果存入寄存器中即可。基于寄存器的架构没有多余的操作。</p>
+<p>JVM是要设计成与平台无关的，平台无关性要保证在没有或者很少的寄存器的机器上同样可以正确执行Java代码。</p>
+<p>另外一个理由是为了指令的紧凑性，因为Java字节可能在网络上传输，所以class文件的大小也是设计JVM字节码指令的一个重要因素，例如class文件中除了处理两个表跳转的指令外，其他都是字节对齐的，操作码可以只占一个字节大小，这都是为了让class文件更加紧凑。</p>
+<h3 id="3-执行引擎的框架设计"><a href="#3-执行引擎的框架设计" class="headerlink" title="3. 执行引擎的框架设计"></a>3. 执行引擎的框架设计</h3><p>每当创建一个线程时，JVM会为这个线程创建一个Java栈，同时为这个线程分配一个寄存器，且这个寄存器会指向这个线程第一行可执行代码，每当调用一个新方法时会在这个栈上创建一个新的栈桢数据结构，这个栈桢会保留这个方法的一些元信息。如在这个方法中定义的局部变量、一些用来支持常量池的解析、正常方法返回及异常处理机制等。</p>
+<p>JVM在调用某些指令时可能需要使用常量池中的一些常量，或者获取常量代表的数据或者这个数据指向的实例化对象，而这些信息都存储在所有线程共享的方法区和Java堆中</p>
+<p><img src="https://images.effiu.cn/blog/web/41.png" alt="Java执行部件"></p>
+<h3 id="4-执行引擎的执行过程"><a href="#4-执行引擎的执行过程" class="headerlink" title="4. 执行引擎的执行过程"></a>4. 执行引擎的执行过程</h3><p><a href="https://www.effiu.cn/blog/2019/07/28/jvm/8_vm_bytecode_execution_engine#4-%E5%9F%BA%E4%BA%8E%E6%A0%88%E7%9A%84%E5%AD%97%E8%8A%82%E7%A0%81%E8%A7%A3%E9%87%8A%E6%89%A7%E8%A1%8C%E5%BC%95">执行引擎的执行过程</a></p>
+<h3 id="5-JVM方法调用栈"><a href="#5-JVM方法调用栈" class="headerlink" title="5. JVM方法调用栈"></a>5. JVM方法调用栈</h3><p>JVM方法调用分为两种，Java方法调用、本地方法调用。下面是Java方法调用过程。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> a = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">int</span> b = <span class="number">2</span>;</span><br><span class="line">    <span class="keyword">int</span> c = math(a, b) /<span class="number">10</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">int</span> <span class="title">math</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">int</span> b)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> (a+ b)/<span class="number">10</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>使用<code>javap -verbose</code>指令查看字节码指令</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br></pre></td><td class="code"><pre><span class="line">  Last modified <span class="number">2020</span>-<span class="number">4</span>-<span class="number">5</span>; size <span class="number">370</span> bytes</span><br><span class="line">  MD5 checksum a2e2cb10733d15ad537edb2b35e3187b</span><br><span class="line">  Compiled from <span class="string">&quot;JVMTest.java&quot;</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">com</span>.<span class="title">effiu</span>.<span class="title">essay</span>.<span class="title">JVMTest</span></span></span><br><span class="line">  minor version: 0</span><br><span class="line">  major version: <span class="number">52</span></span><br><span class="line">  flags: ACC_PUBLIC, ACC_SUPER</span><br><span class="line">Constant pool:</span><br><span class="line">   #1 = Methodref          #4.#15         // java/lang/Object.&quot;&lt;init&gt;&quot;:()V</span><br><span class="line">   #2 = Methodref          #3.#16         // com/effiu/essay/JVMTest.math:(II)I</span><br><span class="line">   #3 = Class              #17            // com/effiu/essay/JVMTest</span><br><span class="line">   #4 = Class              #18            // java/lang/Object</span><br><span class="line">   #5 = Utf8               &lt;init&gt;</span><br><span class="line">   #6 = Utf8               ()V</span><br><span class="line">   #7 = Utf8               Code</span><br><span class="line">   #8 = Utf8               LineNumberTable</span><br><span class="line">   #9 = Utf8               main</span><br><span class="line">  #10 = Utf8               ([Ljava/lang/String;)V</span><br><span class="line">  #11 = Utf8               math</span><br><span class="line">  #12 = Utf8               (II)I</span><br><span class="line">  #13 = Utf8               SourceFile</span><br><span class="line">  #14 = Utf8               JVMTest.java</span><br><span class="line">  #15 = NameAndType        #5:#6          // &quot;&lt;init&gt;&quot;:()V</span><br><span class="line">  #16 = NameAndType        #11:#12        // math:(II)I</span><br><span class="line">  #17 = Utf8               com/effiu/essay/JVMTest</span><br><span class="line">  #18 = Utf8               java/lang/Object</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">public</span> com.effiu.essay.JVMTest();</span><br><span class="line">    descriptor: ()V</span><br><span class="line">    flags: ACC_PUBLIC</span><br><span class="line">    Code:</span><br><span class="line">      stack=<span class="number">1</span>, locals=<span class="number">1</span>, args_size=<span class="number">1</span></span><br><span class="line">         <span class="number">0</span>: aload_0</span><br><span class="line">         1: invokespecial #1                  // Method java/lang/Object.&quot;&lt;init&gt;&quot;:()V</span><br><span class="line">         <span class="number">4</span>: <span class="keyword">return</span></span><br><span class="line">      LineNumberTable:</span><br><span class="line">        line <span class="number">8</span>: <span class="number">0</span></span><br><span class="line"></span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(java.lang.String[])</span></span>;</span><br><span class="line">    descriptor: ([Ljava/lang/String;)V</span><br><span class="line">    flags: ACC_PUBLIC, ACC_STATIC</span><br><span class="line">    Code:</span><br><span class="line">      stack=<span class="number">2</span>, locals=<span class="number">4</span>, args_size=<span class="number">1</span></span><br><span class="line">         <span class="number">0</span>: iconst_1</span><br><span class="line">         <span class="number">1</span>: istore_1</span><br><span class="line">         <span class="number">2</span>: iconst_2</span><br><span class="line">         <span class="number">3</span>: istore_2</span><br><span class="line">         <span class="number">4</span>: iload_1</span><br><span class="line">         <span class="number">5</span>: iload_2</span><br><span class="line">         6: invokestatic  #2                  // Method math:(II)I</span><br><span class="line">         <span class="number">9</span>: bipush        <span class="number">10</span></span><br><span class="line">        <span class="number">11</span>: idiv</span><br><span class="line">        <span class="number">12</span>: istore_3</span><br><span class="line">        <span class="number">13</span>: <span class="keyword">return</span></span><br><span class="line">      LineNumberTable:</span><br><span class="line">        line <span class="number">11</span>: <span class="number">0</span></span><br><span class="line">        line <span class="number">12</span>: <span class="number">2</span></span><br><span class="line">        line <span class="number">13</span>: <span class="number">4</span></span><br><span class="line">        line <span class="number">14</span>: <span class="number">13</span></span><br><span class="line"></span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">int</span> <span class="title">math</span><span class="params">(<span class="keyword">int</span>, <span class="keyword">int</span>)</span></span>;</span><br><span class="line">    descriptor: (II)I</span><br><span class="line">    flags: ACC_PUBLIC, ACC_STATIC</span><br><span class="line">    Code:</span><br><span class="line">      stack=<span class="number">2</span>, locals=<span class="number">2</span>, args_size=<span class="number">2</span></span><br><span class="line">         <span class="number">0</span>: iload_0</span><br><span class="line">         <span class="number">1</span>: iload_1</span><br><span class="line">         <span class="number">2</span>: iadd</span><br><span class="line">         <span class="number">3</span>: bipush        <span class="number">10</span></span><br><span class="line">         <span class="number">5</span>: imul</span><br><span class="line">         <span class="number">6</span>: ireturn</span><br><span class="line">      LineNumberTable:</span><br><span class="line">        line <span class="number">17</span>: <span class="number">0</span></span><br><span class="line">&#125;</span><br><span class="line">SourceFile: <span class="string">&quot;JVMTest.java&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>当JVM执行main方法时，首先将两个常数1和2存储到局部变量区1和2中(指令0~3)，math的两个参数也存储在其对应的方法栈桢中的局部变量区1和2中，所以将a和b从局部变量区压入栈中(指令4～5)。见下图(执行到第5条指令)：</p>
+<p><img src="https://images.effiu.cn/blog/web/42.png" alt="执行到第5条指令"></p>
+<p><code>invokestatic</code>指令时JVM会为math方法创建一个新的栈桢，且将两个参数存储在math方法对应的栈桢的前两个局部变量区中(指令0～1)。此时PC寄存器指向的是math方法的地址。见下图</p>
+<p><img src="https://images.effiu.cn/blog/web/43.png" alt="执行到第5条指令"></p>
+<p>此时math方法的栈桢中已经有两个变量了，其是从main方法的栈桢中传过来的。math方法会先将a、b两个变量相加，再乘以10。见下图：</p>
+<p><img src="https://images.effiu.cn/blog/web/44.png" alt="执行到第5条指令"></p>
+<p><code>ireturn</code>指令是将当前栈桢栈顶元素返回到调用这个方法的栈中，即返回30到main方法，main方法将30放到栈顶。见下图(main第7条指令的状态)</p>
+<p><img src="https://images.effiu.cn/blog/web/45.png" alt="执行到第5条指令"></p>
+<p>main方法将math方法返回的除以10，存到变量3中，见下图</p>
+<p><img src="https://images.effiu.cn/blog/web/46.png" alt="执行到第5条指令"></p>
+<p>执行<code>return</code>指令时main方法对应的栈桢将撤销，若当前线程对应的JVM栈中没有栈桢，这个Java栈也将被JVM撤销，整个JVM退出。</p>
+<h2 id="3-总结"><a href="#3-总结" class="headerlink" title="3. 总结"></a>3. 总结</h2><p>主要包含以下两个问题</p>
+<ul>
+<li>JVM的体系结构</li>
+<li>JVM的执行引擎执行JVM指令的过程</li>
+</ul>
+<p>实际上JVM的执行过程非常复杂，包括JVM在执行字节码时如何自动优化字节码，并将其编译成本地代码，即JIT技术等。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/01/web/6-ClassLoader%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/" rel="prev" title="ClassLoader工作机制">
+      <i class="fa fa-chevron-left"></i> ClassLoader工作机制
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/" rel="next" title="JVM内存管理">
+      JVM内存管理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

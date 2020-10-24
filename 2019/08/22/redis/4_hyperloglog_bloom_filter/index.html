@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="若需要统计网站网页的UV和PV数据，如何实现呢？ PV我们需要给每个网页加一个独立的Redis计数器就可以，Key为网页+日期组成。 UV则需要去重，一个用户一天无论请求多少次都只计算一次，这就要求每个网页请求都要带上用户唯一标识，最简单的方法使用set集合存储当天所有访问过此页面的用户Id。sadd统计用户标识，scard可以取出集合大小。但是当访问量大时，比如几千万的UV，那就就需要很大的se">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis HyperLogLog和布隆过滤器">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/22/redis/4_hyperloglog_bloom_filter/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="若需要统计网站网页的UV和PV数据，如何实现呢？ PV我们需要给每个网页加一个独立的Redis计数器就可以，Key为网页+日期组成。 UV则需要去重，一个用户一天无论请求多少次都只计算一次，这就要求每个网页请求都要带上用户唯一标识，最简单的方法使用set集合存储当天所有访问过此页面的用户Id。sadd统计用户标识，scard可以取出集合大小。但是当访问量大时，比如几千万的UV，那就就需要很大的se">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/09.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/10.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/11.png">
+<meta property="article:published_time" content="2019-08-22T09:49:00.000Z">
+<meta property="article:modified_time" content="2019-08-22T13:53:32.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/redis/09.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/22/redis/4_hyperloglog_bloom_filter/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Redis HyperLogLog和布隆过滤器 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-HyperLogLog"><span class="nav-number">1.</span> <span class="nav-text">1. HyperLogLog</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95"><span class="nav-number">1.1.</span> <span class="nav-text">1. 使用方法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86"><span class="nav-number">1.2.</span> <span class="nav-text">2. 实现原理</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%B8%83%E9%9A%86%E8%BF%87%E6%BB%A4%E5%99%A8"><span class="nav-number">2.</span> <span class="nav-text">2. 布隆过滤器</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95-1"><span class="nav-number">2.1.</span> <span class="nav-text">1. 使用方法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E5%AE%89%E8%A3%85%E6%96%B9%E6%B3%95"><span class="nav-number">2.2.</span> <span class="nav-text">2. 安装方法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86"><span class="nav-number">2.3.</span> <span class="nav-text">3. 实现原理</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E5%8D%A0%E7%94%A8%E7%A9%BA%E9%97%B4%E4%BC%B0%E8%AE%A1"><span class="nav-number">2.4.</span> <span class="nav-text">4. 占用空间估计</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#5-%E5%85%B6%E4%BB%96%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF"><span class="nav-number">2.5.</span> <span class="nav-text">5. 其他应用场景</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/22/redis/4_hyperloglog_bloom_filter/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Redis HyperLogLog和布隆过滤器
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-22 17:49 17:49:00" itemprop="dateCreated datePublished" datetime="2019-08-22T17:49:00+08:00">2019-08-22 17:49</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-22 21:53 21:53:32" itemprop="dateModified" datetime="2019-08-22T21:53:32+08:00">2019-08-22 21:53</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/" class="post-meta-item leancloud_visitors" data-flag-title="Redis HyperLogLog和布隆过滤器" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>若需要统计网站网页的UV和PV数据，如何实现呢？</p>
+<p>PV我们需要给每个网页加一个独立的Redis计数器就可以，Key为网页+日期组成。</p>
+<p>UV则需要去重，一个用户一天无论请求多少次都只计算一次，这就要求每个网页请求都要带上用户唯一标识，最简单的方法使用<code>set</code>集合存储当天所有访问过此页面的用户Id。<code>sadd</code>统计用户标识，<code>scard</code>可以取出集合大小。但是当访问量大时，比如几千万的UV，那就就需要很大的set集合统计，浪费空间。若页面非常多，所需要的存储空间非常大。</p>
+<p>Redis提供了<code>HyperLogLog</code>数据结构就是用来解决这种统计问题的。<code>HyperLogLog</code>提供不精确的去重计数方案，其标准误差是<code>0.81%</code>，这样的精确度已经完全满足UV统计需求了。<code>HyperLogLog</code>是Redis的高级数据结构，非常有用，<font color='red'><code>HyperLogLog</code>数据结构来进行估数，它非常有价值，可以解决很多精确度不高的统计需求</font>。</p>
+<p>但是我们无法知道<code>HyperLogLog</code>数据结构内是否存在某个值，因为其为提供相关方法。若有个需要判断值是否在Redis中存在的业务场景，如何处理呢？例如：新闻客户端中，每次推荐都要去掉那些已经看过的内容，新闻客户端如何去重呢？</p>
+<ul>
+<li>服务端有统计用户访问记录，直接从用户历史记录中进行筛选，当用户量大，新闻又多的情况下，性能会很差。需要频繁的在数据库中进行<code>exists</code>操作。</li>
+<li>缓存，将历史记录缓存起来，这回浪费很大的存储空间，且存储空间会随着时间线性增长</li>
+<li><strong>布隆过滤器</strong>(Bloom Filter)，专门用来解决去重问题，且还会节省90%以上的空间，但存在误判的情况。</li>
+</ul>
+<a id="more"></a>
+
+<h3 id="1-HyperLogLog"><a href="#1-HyperLogLog" class="headerlink" title="1. HyperLogLog"></a>1. HyperLogLog</h3><h4 id="1-使用方法"><a href="#1-使用方法" class="headerlink" title="1. 使用方法"></a>1. 使用方法</h4><p><code>HyperLogLog</code>提供了两个指令<code>pfadd</code>和<code>pfcount</code></p>
+<ul>
+<li><code>pfadd</code>：增加计数，与<code>sadd</code>类似</li>
+<li><code>pfcount</code>：获取计数，与<code>scard</code>类似</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; pfadd x 1</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; pfcount x</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; pfadd x 2</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; pfcount x</span><br><span class="line">(integer) 2</span><br><span class="line">127.0.0.1:6379&gt; pfadd x 1	# 重复值，不计入HyperLogLog中</span><br><span class="line">(integer) 0</span><br><span class="line">127.0.0.1:6379&gt; pfcount x</span><br><span class="line">(integer) 2</span><br></pre></td></tr></table></figure>
+
+<p>使用spring-boot-starter-redis，</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Test</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">pfadd</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    String key = <span class="string">&quot;hyper&quot;</span>;</span><br><span class="line">    <span class="keyword">int</span> length = <span class="number">1000</span>;</span><br><span class="line">    String[] values = <span class="keyword">new</span> String[length];</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        values[i % length] = i + <span class="string">&quot;&quot;</span>;</span><br><span class="line">        <span class="keyword">if</span> (i % (length / <span class="number">10</span>) == (length / <span class="number">10</span> - <span class="number">1</span>)) &#123;</span><br><span class="line">            hyperLogLogOperation.pfadd(key, values);</span><br><span class="line">            System.out.println(<span class="string">&quot;pfadd&quot;</span> + (i + <span class="number">1</span>) + <span class="string">&quot;, pfcount:&quot;</span> + hyperLogLogOperation.pfcount(key));</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    hyperLogLogOperation.del(key);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>100</th>
+<th>1000</th>
+<th>100000</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>pfadd:10, pfcount:10<br/>pfadd:20, pfcount:20<br/>pfadd:30, pfcount:30<br/>pfadd:40, pfcount:40<br/>pfadd:50, pfcount:50<br/>pfadd:60, pfcount:60<br/>pfadd:70, pfcount:70<br/>pfadd:80, pfcount:80<br/>pfadd:90, pfcount:90<br/>pfadd:100, pfcount:100</td>
+<td>pfadd:100, pfcount:100<br/>pfadd:200, pfcount:200<br/>pfadd:300, pfcount:299<br/>pfadd:400, pfcount:401<br/>pfadd:500, pfcount:502<br/>pfadd:600, pfcount:603<br/>pfadd:700, pfcount:701<br/>pfadd:800, pfcount:800<br/>pfadd:900, pfcount:901<br/>pfadd:1000, pfcount:999</td>
+<td>pfadd:10000, pfcount:9890<br/>pfadd:20000, pfcount:19897<br/>pfadd:30000, pfcount:29565<br/>pfadd:40000, pfcount:39270<br/>pfadd:50000, pfcount:49511<br/>pfadd:60000, pfcount:59126<br/>pfadd:70000, pfcount:69588<br/>pfadd:80000, pfcount:79667<br/>pfadd:90000, pfcount:89596<br/>pfadd:100000, pfcount:99681</td>
+</tr>
+</tbody></table>
+<p>上表是代码中length长度为<code>1000</code>、<code>10000</code>、<code>10000</code>时的<code>pfcount</code>的结果</p>
+<ul>
+<li>发现当<code>length</code>小于<code>100</code>时是精确统计</li>
+<li>当<code>length</code>大于<code>100</code>时会出现误差。当<code>length</code>为<code>100000</code>时误差为0.319%。</li>
+<li><code>length</code>为<code>10000</code>时，执行多次，其五误差几乎没有区别</li>
+</ul>
+<p><code>HyperLogLog</code>除了<code>pfadd</code>和<code>pfcount</code>之外，还有<code>pfmerge</code>指令，用于将多个pf计数值累加在一起形成一个新的pf值</p>
+<p><code>HyperLogLog</code>数据结构需要占据一定12K的存储空间，其不适合统计单个用户相关的数据。当计数较小时，其存储空间采用稀释矩阵存储，占用空间小。当计数变大后，稀疏矩阵占用空间超过阈值时就会变为稠密矩阵(12K空间)</p>
+<blockquote>
+<p>矩阵中，若数值为0的元素数目远远多于非0的数目，且非0元素分布没有规律时，则成为稀疏矩阵，反之则为稠密矩阵。非零元素的总数比上矩阵所有元素总数为矩阵的稠密度。</p>
+</blockquote>
+<h4 id="2-实现原理"><a href="#2-实现原理" class="headerlink" title="2. 实现原理"></a>2. 实现原理</h4><p><code>HyperLogLog</code>实现原理非常复杂。</p>
+<p><img src="https://images.effiu.cn/blog/redis/09.png"></p>
+<p>上图的意思是，给定一系列随机整数，记录下低位连续零位的最大长度K，通过这个K值可以估算出随机数的数量。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> value = <span class="number">28000</span>;</span><br><span class="line"><span class="comment">// 生成随机数</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">1000</span>; i &lt; value; i += <span class="number">1000</span>) &#123;</span><br><span class="line">    <span class="keyword">int</span> maxbit = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> n = <span class="number">0</span>; n &lt; i; n++) &#123;</span><br><span class="line">        <span class="keyword">long</span> nextLong = ThreadLocalRandom.current().nextLong(<span class="number">2L</span> &lt;&lt; <span class="number">32</span>);</span><br><span class="line">        <span class="comment">// 计算最右侧位的0的个数</span></span><br><span class="line">        <span class="keyword">int</span> bit = <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> j = <span class="number">1</span>; j &lt; <span class="number">32</span>; j++) &#123;</span><br><span class="line">            <span class="comment">// 右移后左移，比较，不一致则说明到达非0位</span></span><br><span class="line">            <span class="keyword">if</span> (nextLong &gt;&gt; j &lt;&lt; j != nextLong) &#123;</span><br><span class="line">                bit = j - <span class="number">1</span>;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (bit &gt; maxbit) &#123;</span><br><span class="line">            maxbit = bit;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    System.out.printf(<span class="string">&quot;%d %.2f %d\n&quot;</span>, i, Math.log(i) / Math.log(<span class="number">2</span>), maxbit);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">17000 14.05 14</span><br><span class="line">18000 14.14 14</span><br><span class="line">19000 14.21 18</span><br><span class="line">20000 14.29 16</span><br><span class="line">21000 14.36 13</span><br><span class="line">22000 14.43 13</span><br><span class="line">23000 14.49 13</span><br><span class="line">24000 14.55 13</span><br><span class="line">25000 14.61 15</span><br><span class="line">26000 14.67 15</span><br><span class="line">27000 14.72 16</span><br></pre></td></tr></table></figure>
+
+<p>可以发现约等于<code>N = 2^K</code>，当然也不能直接使用<code>2^K</code>得出结果，误差太大，所以使用加权估计，得出一个比较准确的值。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> value = <span class="number">1000000</span>;</span><br><span class="line"><span class="comment">// 生成随机数</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">100000</span>; i &lt; value; i += <span class="number">100000</span>) &#123;</span><br><span class="line">    <span class="comment">// 用于统计，加权求平均</span></span><br><span class="line">    <span class="keyword">int</span>[] maxbits = <span class="keyword">new</span> <span class="keyword">int</span>[<span class="number">1024</span>];</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> n = <span class="number">0</span>; n &lt; i; n++) &#123;</span><br><span class="line">        <span class="keyword">long</span> nextLong = ThreadLocalRandom.current().nextLong(<span class="number">1L</span> &lt;&lt; <span class="number">32</span>);</span><br><span class="line">        <span class="comment">// 计算最右侧位的0的个数</span></span><br><span class="line">        <span class="keyword">int</span> bit = <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> j = <span class="number">1</span>; j &lt; <span class="number">32</span>; j++) &#123;</span><br><span class="line">            <span class="comment">// 右移后左移，比较，不一致则说明到达非0位</span></span><br><span class="line">            <span class="keyword">if</span> (nextLong &gt;&gt; j &lt;&lt; j != nextLong) &#123;</span><br><span class="line">                bit = j - <span class="number">1</span>;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">int</span> index = (<span class="keyword">int</span>) ((nextLong &amp; <span class="number">0xfff0000</span>) &gt;&gt; <span class="number">16</span>) % <span class="number">1024</span>;</span><br><span class="line">        <span class="keyword">if</span> (bit &gt; maxbits[index]) &#123;</span><br><span class="line">            maxbits[index] = bit;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 加权</span></span><br><span class="line">    <span class="keyword">double</span> sum = Arrays.stream(maxbits).mapToDouble(p -&gt; <span class="number">1.0</span> / (<span class="keyword">double</span>) p).sum();</span><br><span class="line">    <span class="keyword">double</span> v = Math.pow(<span class="number">2</span>, <span class="number">1024</span> / sum) * <span class="number">1024</span>;</span><br><span class="line">    System.out.printf(<span class="string">&quot;%d %.2f %f\n&quot;</span>, i, v, Math.abs(v - i) / i);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>上述代码中，统计低位连续零位长度，计算平均数使用了调和平均(倒数的平均)，普通的平均可能因为个别离群值对平均结果产生较大影响，调和平均可以有效平滑离群值的影响。</p>
+<p>数字，HyperLogLog结果，误差分别如下：</p>
+</blockquote>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"># 10000 ~ 10000</span><br><span class="line">10000 1024.00 0.897600</span><br><span class="line">20000 13969.31 0.301534</span><br><span class="line">30000 23489.89 0.217004</span><br><span class="line">40000 33584.74 0.160381</span><br><span class="line">50000 45875.72 0.082486</span><br><span class="line">60000 52604.23 0.123263</span><br><span class="line">70000 63463.54 0.093378</span><br><span class="line">80000 71176.03 0.110300</span><br><span class="line">90000 82269.44 0.085895</span><br><span class="line"></span><br><span class="line"># 100000 ~ 1000000</span><br><span class="line">100000 90529.35 0.094707</span><br><span class="line">200000 198486.87 0.007566</span><br><span class="line">300000 297014.96 0.009950</span><br><span class="line">400000 388669.03 0.028327</span><br><span class="line">500000 487944.01 0.024112</span><br><span class="line">600000 584373.50 0.026044</span><br><span class="line">700000 702676.54 0.003824</span><br><span class="line">800000 841088.37 0.051360</span><br><span class="line">900000 920170.04 0.022411</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>可以得出，当HyperLogLog为10万级别以上后，其误差非常小。也可以调高桶进行计算</p>
+</blockquote>
+<p>上述算法中，使用了1024个桶进行独立计数，不过在Redis的HyperLogLog中用到的是16384(z^14)个桶，每个桶的<code>maxbits</code>需要6个bits存储，最大可以表示63，所以一共有<code>2^14*6</code>个bit位，即<code>2^10*2*6</code>个bit位，即12K。</p>
+<p><code>HyperLogLog</code>提供了<code>pfadd</code>和<code>pfcount</code>，但是没有提供<code>pfcontains</code>这种方法，所以我们无法知道某个值是否在<code>HyperLogLog</code>数据结构中。</p>
+<h3 id="2-布隆过滤器"><a href="#2-布隆过滤器" class="headerlink" title="2. 布隆过滤器"></a>2. 布隆过滤器</h3><p><strong>布隆过滤器</strong>可以理解位一个不精确的<code>set</code>结构，当使用<strong>布隆过滤器</strong>的<code>contains</code>方法判断对象是否存在时，可能会误判，但也可以把误差控制在很小范围内。布隆过滤器判断某个值存在时，其可能不存在，但当判断为不存在时，那肯定不存在。</p>
+<p>其应用到新闻去重中，布隆过滤器能准确判断已经看过的内容。没看过的内容也可能会漏掉(误判)一部分，但是能保证绝大多数新内容都能准确识别。这样就能保证推荐给用户的内容是无重复的。</p>
+<h4 id="1-使用方法-1"><a href="#1-使用方法-1" class="headerlink" title="1. 使用方法"></a>1. 使用方法</h4><p>布隆过滤器有两个基本指令，</p>
+<ul>
+<li><code>bf.add</code>添加元素，与<code>set</code>集合中<code>sadd</code>类似，但一次只能添加一个元素。</li>
+<li><code>bf.exists</code>，查询元素是否存在，用法与<code>set</code>集合的<code>sismember</code>差不多。</li>
+<li><code>bf.madd</code>，添加元素，可以一次添加多个。</li>
+<li><code>bf.mexists</code>，查询多个元素是否存在，</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; bf.add x a1</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bf.add x a2</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bf.add x a3</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bf.exists x a1</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bf.exists x a2</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bf.exists x a4</span><br><span class="line">(integer) 0</span><br></pre></td></tr></table></figure>
+
+<h4 id="2-安装方法"><a href="#2-安装方法" class="headerlink" title="2. 安装方法"></a>2. 安装方法</h4><p>Redis 官方提供的<strong>布隆过滤器</strong>是从 Redis 4.0开始提供的。其安装过程如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/RedisBloom/RedisBloom</span><br><span class="line">cd RedisBloom/</span><br><span class="line">make</span><br></pre></td></tr></table></figure>
+
+<p>修改启动脚本，在start启动命令中，加<code>$BLOOM_FILTER</code>配置，<code>INITIAL_SIZE</code>用来设置默认容量，<code>ERROR_RATE</code>默认错误率</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line">REDISPORT=****</span><br><span class="line">PASSWORD=****</span><br><span class="line">EXEC=/usr/local/bin/redis-server</span><br><span class="line">CLIEXEC=/usr/local/bin/redis-cli</span><br><span class="line"></span><br><span class="line">PIDFILE=/var/run/redis_$&#123;REDISPORT&#125;.pid</span><br><span class="line">CONF=&quot;/usr/local/redis-4.0.6/redis.conf&quot;</span><br><span class="line">BLOOM_FILTER=&quot;--loadmodule /usr/local/redis-4.0.6/RedisBloom/redisbloom.so INITIAL_SIZE 100000 ERROR_RATE 0.001&quot;</span><br><span class="line"></span><br><span class="line">case &quot;$1&quot; in</span><br><span class="line">    start)</span><br><span class="line">        if [ -f $PIDFILE ]</span><br><span class="line">        then</span><br><span class="line">                echo &quot;$PIDFILE exists, process is already running or crashed&quot;</span><br><span class="line">        else</span><br><span class="line">                echo &quot;Starting Redis server...&quot;</span><br><span class="line">                $EXEC $CONF $BLOOM_FILTER</span><br><span class="line">        fi</span><br><span class="line">        ;;</span><br><span class="line">    stop)</span><br><span class="line">        if [ ! -f $PIDFILE ]</span><br><span class="line">        then</span><br><span class="line">                echo &quot;$PIDFILE does not exist, process is not running&quot;</span><br><span class="line">        else</span><br><span class="line">                PID=$(cat $PIDFILE)</span><br><span class="line">                echo &quot;Stopping ...&quot;</span><br><span class="line">                $CLIEXEC -a $PASSWORD -p $REDISPORT shutdown</span><br><span class="line">                while [ -x /proc/$&#123;PID&#125; ]</span><br><span class="line">                do</span><br><span class="line">                    echo &quot;Waiting for Redis to shutdown ...&quot;</span><br><span class="line">                    sleep 1</span><br><span class="line">                done</span><br><span class="line">                echo &quot;Redis stopped&quot;</span><br><span class="line">        fi</span><br><span class="line">        ;;</span><br><span class="line">    clistart)</span><br><span class="line">	if [ ! -f $PIDFILE ]</span><br><span class="line">	then</span><br><span class="line">		echo &quot;$PIDFILE does not exist, process is not running&quot;</span><br><span class="line">	else</span><br><span class="line">		echo &quot;redis is connecting ...&quot;</span><br><span class="line"><span class="meta">		$</span><span class="bash">CLIEXEC -p <span class="variable">$REDISPORT</span> -a <span class="variable">$PASSWORD</span></span></span><br><span class="line">	fi</span><br><span class="line">	;;</span><br><span class="line">    *)</span><br><span class="line">    echo &quot;Please use start, stop or clistart as first argument&quot;</span><br><span class="line">    ;;</span><br><span class="line">esac</span><br></pre></td></tr></table></figure>
+
+<p>目前版本spring-boot-starter-redis未提供布隆过滤器，此处省略代码实现。感兴趣的，可以使用<code>Lettuce</code>计算下错误率。</p>
+<p>直接使用布隆过滤器，就会在我们第一次<code>bf.add</code>时使用默认参数构建(如上文的<code>INITIAL_SIZE 100000 ERROR_RATE 0.001</code>)。Redis还提供了自定义参数的布隆过滤器。在<code>bf.add</code>之前使用<code>bf.reserve</code>指令显式创建。若对应的key已存在，<code>bf.reserve</code>报错。其参数：<code>key</code>、<code>error_rate</code>、<code>initial_size</code>。错误率越低，需要的空间越大。<code>initial_size</code>表示预计放入的元素数量，当实际数量超出该值时，错误率会明显上升。</p>
+<p>布隆过滤器的<code>initial_size</code>估计的过大，会浪费存储空间，估计的过小，会影响准确率，所以在使用前一定要尽可能精确估计好元素数量，还需要加一定的冗余空间以避免实际元素可能会意外高出估计值很多。<code>error_rate</code>越小，需要的存储空间越大。</p>
+<h4 id="3-实现原理"><a href="#3-实现原理" class="headerlink" title="3. 实现原理"></a>3. 实现原理</h4><p><img src="https://images.effiu.cn/blog/redis/10.png" alt="布隆过滤器原理"></p>
+<p>布隆过滤器对应到Redis的数据结构里就是一个大型的位数组和几个不一样的无偏hash函数，无偏指的是可以把元素的hash值算的比较均匀。</p>
+<p>向布隆过滤器中添加<code>key</code>时，会使用多个<code>hash</code>函数对<code>key</code>进行<code>hash</code>算得一个整数索引值然后对位数组长度进行取模运算得到一个位置，每个<code>hash</code>函数都会算得一个不同的位置。再把位数组的这几个位置都置为<code>1</code>就完成了<code>add</code>操作。</p>
+<p>向布隆过滤器询问<code>key</code>是否存在时，与<code>bf.add</code>一致，也会把<code>hash</code>的几个位置算出来，看看位数组中这些位置是否为<code>1</code>，只要<code>1</code>个为<code>0</code>，那就说明布隆过滤器中这个<code>key</code>不存在；若都为<code>1</code>，那就说明这个<code>key</code>极有可能存在，并不是肯定存在，因为有可能这些位被置为1是因为其他key存在导致的。位数组越稀疏，准确率越高，越拥挤则准确率越低。</p>
+<p>使用布隆过滤器时，不要让实际元素大于初始化大小，当实际元素数开始超出初始化大小时，应对布隆过滤器进行重建，重新分配一个<code>size</code>更大的过滤器，再将所有历史元素批量<code>add</code>进去。<code>error_rate</code>不会因为数量超出就急剧增加，这给我们重建过滤器提供了较为宽松的时间。</p>
+<h4 id="4-占用空间估计"><a href="#4-占用空间估计" class="headerlink" title="4. 占用空间估计"></a>4. 占用空间估计</h4><p>布隆过滤器占用空间有一个简单的计算公式。布隆过滤器有两个参数：</p>
+<ul>
+<li>n，预计元素的数量</li>
+<li>f，错误率</li>
+</ul>
+<p>由以上两个输入可以得到两个输出：</p>
+<ul>
+<li>l，需要的存储空间大小，bit</li>
+<li>k，hash函数的最佳数量，hash函数会直接影响错误率，最佳的数量会有最低的错误率</li>
+</ul>
+<figure class="highlight mathematica"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">k = <span class="number">0.7</span> * (l / n)</span><br><span class="line">f = <span class="number">0.6185</span> ^ (l / n)	# 可以计算出l</span><br></pre></td></tr></table></figure>
+
+<p>从公式可以得出：</p>
+<ul>
+<li>位数组越长，错误率越低</li>
+<li>位数组越长，hash函数越多，越影响计算效率</li>
+<li>当一个元素平均需要8bit指纹空间时，错误率大约为2%</li>
+<li>错误率为10%，一个元素平均需要4.793 bit</li>
+<li>错误率为1%，一个元素需要9.585 bit</li>
+<li>错误率为0.1%，一个元素需要14.377 bit</li>
+</ul>
+<p>可以发现一个元素仅仅需要15bit就能控制错误率在0.1%。布隆过滤器存储的是元素的指纹，需要15bit，而元素的内容甚至可以达到几百字节，而且元素本身需要一个指针被set集合来引用，所以布隆过滤器的空间优势是非常明显的</p>
+<p>目前已经由网站支持布隆过滤器相关计算，例如[布隆计算器](<a target="_blank" rel="noopener" href="https://krisives.github.io/bloom-calculator/]">https://krisives.github.io/bloom-calculator/]</a></p>
+<p>当元素超出时，误判率会发生变化。引入参数t，表示实际元素和预计元素的倍数。公式如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">f&#x3D;(1-0.5^t)^k  # 极限近似，k 是 hash 函数的最佳数量</span><br></pre></td></tr></table></figure>
+
+<p>当t增加时，错误率f会增大，分别选择错误率为10%、1%、0.1%的k值，曲线如下：</p>
+<p><img src="https://images.effiu.cn/blog/redis/11.png" alt="曲线"></p>
+<p>从上图可以发现：错误率的变化情况，当t为2时(实际元素比预计元素)，错误率会明显上升。</p>
+<h4 id="5-其他应用场景"><a href="#5-其他应用场景" class="headerlink" title="5. 其他应用场景"></a>5. 其他应用场景</h4><ol>
+<li>爬虫系统，对URL进行去重，已经爬过的网页不需要继续爬</li>
+<li>NoSQL，当用户来查询某个Row时，可以先通过布隆过滤器过滤掉大量不存在的Row请求，显著降低IO请求</li>
+<li>邮箱系统，垃圾邮件过滤，误判很低</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/Redis/" rel="tag"># Redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/20/redis/3_delay_queue_bit/" rel="prev" title="Redis延时队列和位图">
+      <i class="fa fa-chevron-left"></i> Redis延时队列和位图
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/23/redis/5_limiting/" rel="next" title="Redis 限流算法">
+      Redis 限流算法 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

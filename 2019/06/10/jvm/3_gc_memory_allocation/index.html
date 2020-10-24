@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Java与C++之间主要区别：内存动态分配和垃圾收集技术 1. 概述当需要排查各种内存溢出、内存泄露问题时，当垃圾收集称为系统达到更高并发量的瓶颈时，就需要我们对内存分配与内存回收实施必要的监控与调节。 Java内存运行区域中程序计数器、虚拟机栈、本地方法栈会随着线程而存在和销毁；栈中的栈帧随着方法的进入和退出而执行出栈和入栈操作，每个栈帧中分配多少内存是在类结构中确定的（JIT编译器会进行一些优">
+<meta property="og:type" content="article">
+<meta property="og:title" content="垃圾收集器与内存分配策略">
+<meta property="og:url" content="https://www.effiu.cn/2019/06/10/jvm/3_gc_memory_allocation/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Java与C++之间主要区别：内存动态分配和垃圾收集技术 1. 概述当需要排查各种内存溢出、内存泄露问题时，当垃圾收集称为系统达到更高并发量的瓶颈时，就需要我们对内存分配与内存回收实施必要的监控与调节。 Java内存运行区域中程序计数器、虚拟机栈、本地方法栈会随着线程而存在和销毁；栈中的栈帧随着方法的进入和退出而执行出栈和入栈操作，每个栈帧中分配多少内存是在类结构中确定的（JIT编译器会进行一些优">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/03.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/06.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/07.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/08.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/09.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/10.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/11.jpg">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/12.jpg">
+<meta property="article:published_time" content="2019-06-09T16:51:00.000Z">
+<meta property="article:modified_time" content="2020-04-11T09:57:55.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/jvm/03.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/06/10/jvm/3_gc_memory_allocation/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>垃圾收集器与内存分配策略 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E6%A6%82%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">1. 概述</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E5%88%A4%E6%96%AD%E5%AF%B9%E8%B1%A1%E6%98%AF%E5%90%A6%E9%9C%80%E8%A6%81%E5%9B%9E%E6%94%B6"><span class="nav-number">2.</span> <span class="nav-text">2. 判断对象是否需要回收</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E5%9E%83%E5%9C%BE%E6%94%B6%E9%9B%86%E7%AE%97%E6%B3%95"><span class="nav-number">3.</span> <span class="nav-text">3. 垃圾收集算法</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-HotSpot%E7%AE%97%E6%B3%95%E5%AE%9E%E7%8E%B0"><span class="nav-number">4.</span> <span class="nav-text">4. HotSpot算法实现</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#5-%E5%9E%83%E5%9C%BE%E6%94%B6%E9%9B%86%E5%99%A8"><span class="nav-number">5.</span> <span class="nav-text">5. 垃圾收集器</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#6-%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E4%B8%8E%E5%9B%9E%E6%94%B6%E7%AD%96%E7%95%A5"><span class="nav-number">6.</span> <span class="nav-text">6.  内存分配与回收策略</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#7-%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">7. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/06/10/jvm/3_gc_memory_allocation/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          垃圾收集器与内存分配策略
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-06-10 00:51 00:51:00" itemprop="dateCreated datePublished" datetime="2019-06-10T00:51:00+08:00">2019-06-10 00:51</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-04-11 17:57 17:57:55" itemprop="dateModified" datetime="2020-04-11T17:57:55+08:00">2020-04-11 17:57</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/06/10/jvm/3_gc_memory_allocation/" class="post-meta-item leancloud_visitors" data-flag-title="垃圾收集器与内存分配策略" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/06/10/jvm/3_gc_memory_allocation/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/06/10/jvm/3_gc_memory_allocation/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>14 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Java与C++之间主要区别：内存动态分配和垃圾收集技术</p>
+<h6 id="1-概述"><a href="#1-概述" class="headerlink" title="1. 概述"></a>1. 概述</h6><p>当需要排查各种内存溢出、内存泄露问题时，当垃圾收集称为系统达到更高并发量的瓶颈时，就需要我们对内存分配与内存回收实施必要的监控与调节。</p>
+<p>Java内存运行区域中程序计数器、虚拟机栈、本地方法栈会随着线程而存在和销毁；栈中的栈帧随着方法的进入和退出而执行出栈和入栈操作，每个栈帧中分配多少内存是在类结构中确定的（JIT编译器会进行一些优化），所以这些区域不需要过多考虑回收，它们会随着线程结束或者方法结束被回收。</p>
+<p>Java堆和方法区是所有线程共享的，一个接口的多个实现类需要的内存不确定，一个方法的多个分支中需要的内存也不确定，只有在程序运行期才知道创建哪些对象，其内存分配和回收是动态的，所以需要垃圾收集器回收这部分区域。</p>
+<h6 id="2-判断对象是否需要回收"><a href="#2-判断对象是否需要回收" class="headerlink" title="2. 判断对象是否需要回收"></a>2. 判断对象是否需要回收</h6><ol>
+<li><p>引用计数器法</p>
+<p>给对象添加一个引用计数器，每当有地方引用对象时，计数器加1；引用失效时，计数器减1，任何时候计数器为0的对象都是可回收的。<font color='red'>优点</font>：实现简单，判断效率高。<font color='red'>缺点</font>：<strong>无法解决对象之间相互循环引用的问题</strong>，所以JVM中没有使用引用计数器法。</p>
+</li>
+<li><p>可达性分析算法</p>
+<p>通过一系列<strong>GC Roots</strong>对象作为起始点，从这些节点开始向下搜索，搜索走过的路径为<strong>引用链</strong>，当一个对象到<strong>GC Roots</strong>没有任何引用链相连时(GC Roots到这些对象不可达)，则说明此对象不可用。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/03.jpg" alt="可达性分析算法"></p>
+<p>Java中可以作为<strong>GC Roots</strong>的对象包括以下几种：</p>
+<ul>
+<li>虚拟机栈中引用的对象</li>
+<li>方法区中静态常量属性引用的对象</li>
+<li>方法区中常量引用的对象</li>
+<li>本地方法栈中<strong>JNI</strong>(Java Native Interface)引用的对象</li>
+</ul>
+</li>
+<li><p>对象引用</p>
+<p>引用计数器法与可达性分析算法，都是根据引用判断对象是否存活。存在这么一类对象：当内存空间足够时，则可以保留在内存中，当内存空间在进行垃圾回收后，内存仍不够使用，则可以抛弃这些对象。Java引用分为：强引用(Strong Reference)、软引用(Soft Reference)、弱引用(Weak Reference)、虚引用(Phantom Reference)，其引用强度依次减弱。</p>
+<ul>
+<li>强引用，在代码中普遍存在，<code>Object o = new Object();</code>这类引用都是强引用，只要强引用存在，垃圾收集器永远不会回收引用的对象</li>
+<li>软引用，是指一些有用但非必需对象，这些对象在系统将要发生<strong>OOM</strong>时，会把这些对象列进回收范围之中进行二次回收，若回收后仍没有足够的内存，则抛出<strong>OOM</strong></li>
+<li>弱引用，描述非必需对象，被弱引用关联的对象只能生存到下一次<strong>GC</strong>发生之前。发生GC时，必然会回收弱引用关联的对象</li>
+<li>虚引用，唯一目的是：在这个对象被收集器回收时收到一个系统通知</li>
+</ul>
+</li>
+<li><p>对象的生存与死亡</p>
+<p>即使可达性分析算法中不可达的对象，也可以继续存活下去，这种对象处于第一次标记阶段，要被回收至少要经历两次标记过程。当经过可达性分析后，发现没有与<strong>GC Roots</strong>相连的引用链，对象将被第一次标记并且进行一次筛选，判断是否有必须执行<code>finalize()</code>方法，若对象没有覆盖<code>finalize()</code>方法，或者<code>finalize()</code>方法已经被虚拟机调用过，虚拟机将认为对象没有必要执行<code>finalize()</code>方法。</p>
+<p>当对象被判定为有必要执行<code>finalize()</code>方法，这个对象将被放入到一个叫做<strong>F-Queue</strong>队列中，并在稍后由一个虚拟机自动建立的、低优先级的<strong>Finalizer</strong>线程去执行对象的<code>finalize()</code>方法，但是这个线程并不会等待其执行结束，这是为了防止<code>finalize()</code>方法执行缓慢，或者发生死循环，可能导致队列中其他对象永久处于等待状态，甚至导致整个GC回收缓慢。若对象在<code>finalize()</code>方法中与<strong>GC Roots</strong>关联(例如，把<code>this</code>关键字赋值给某个类变量或者对象的成员变量)，那么第二次标记时将会被移出”即将回收”的集合，若对象没有与<strong>GC Roots</strong>关联将会被回收</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">FinalizeEscapeGC</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 静态常量属性</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> FinalizeEscapeGC SAVE_HOOK = <span class="keyword">null</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">isAlive</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;yes, i am still alive&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">protected</span> <span class="keyword">void</span> <span class="title">finalize</span><span class="params">()</span> <span class="keyword">throws</span> Throwable </span>&#123;</span><br><span class="line">        <span class="keyword">super</span>.finalize();</span><br><span class="line">        System.out.println(<span class="string">&quot;finalize method executed&quot;</span>);</span><br><span class="line">        <span class="comment">// 在第一次执行finalize后，与GC Roots关联成功</span></span><br><span class="line">        FinalizeEscapeGC.SAVE_HOOK = <span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">        SAVE_HOOK = <span class="keyword">new</span> FinalizeEscapeGC();</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 对象第一次拯救自己</span></span><br><span class="line">        SAVE_HOOK = <span class="keyword">null</span>;</span><br><span class="line">        System.gc();</span><br><span class="line">        Thread.sleep(<span class="number">500</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (SAVE_HOOK != <span class="keyword">null</span>) &#123;</span><br><span class="line">            SAVE_HOOK.isAlive();</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            System.out.println(<span class="string">&quot;no, i am dead&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        SAVE_HOOK = <span class="keyword">null</span>;</span><br><span class="line">        <span class="comment">// 第二次gc()，因为已经调用过finalize方法，所以JVM不会再次执行finalize方法</span></span><br><span class="line">        System.gc();</span><br><span class="line">        Thread.sleep(<span class="number">500</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (SAVE_HOOK != <span class="keyword">null</span>) &#123;</span><br><span class="line">            SAVE_HOOK.isAlive();</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            System.out.println(<span class="string">&quot;no, i am dead&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>实际开发中尽量不要使用<code>finalize()</code>方法，若要回收资源建议使用<code>try-with-resource</code>。</p>
+</li>
+<li><p>回收方法区</p>
+<p>Java虚拟机规范中可以不要求虚拟机实现方法区的垃圾收集，且方法区中的垃圾收集一般性价比低。方法区的垃圾收集主要分为两部分：废弃常量和无用的类。</p>
+<ul>
+<li><p>废弃常量回收，与Java堆中的对象回收类似，当没有任何引用关联常量时，在垃圾回收时回收 该常量。常量池中其他类(接口)、方法、字段的符号引用与此类似（<code>static</code>修饰符修饰）。</p>
+</li>
+<li><p>无用的类，类需要满足以下3个条件才会被标记为“无用的类”，满足以下3个条件后，可以被回收，但是不一定要回收</p>
+<ul>
+<li>该类所有实例都被回收，Java堆中不存在该类的实例</li>
+<li>该类的<strong>ClassLoader</strong>已被回收</li>
+<li>该类的<code>java.lang.Class</code>对象没有在任何地方被引用，无法在任何地方通过反射访问该类的方法</li>
+</ul>
+<figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">-Xnoclassgc		<span class="comment">//控制垃圾回收方法区中无用的类</span></span><br><span class="line">-verbose:class/-XX:+TraceClassLoading/-XX:TraceClassUnLoading	//查看类加载和卸载信息</span><br></pre></td></tr></table></figure>
+
+</li>
+</ul>
+<p>大量使用反射、动态代理、CGLib等<strong>ByteCode</strong>框架、动态生成<strong>JSP</strong>以及OSGi这类频繁自定义<strong>ClassLoader</strong>的场景都需要虚拟机具备类卸载的功能，保证方法区不会溢出</p>
+</li>
+</ol>
+<h6 id="3-垃圾收集算法"><a href="#3-垃圾收集算法" class="headerlink" title="3. 垃圾收集算法"></a>3. 垃圾收集算法</h6><ol>
+<li><p>标记—清除算法，分为标记、清除两个阶段。</p>
+<ul>
+<li>标记，标记处所以需要回收的对象</li>
+<li>清除，标记完成后统一回收被标记的对象</li>
+</ul>
+<p><font color='red'>不足之处</font>：效率低，标记和清除效率很低；空间利用率低，标记清除之后会产生大量不连续的空间碎片，可能会导致以后需要分配大对象时，无法找到足够的连续内存不得不提前出发<strong>GC</strong></p>
+</li>
+<li><p>复制算法</p>
+<p>解决了效率问题，将可用内存空间分为大小相等的两部分，每次只使用其中一块，当被使用的内存满后，将活着的对象复制到另外一部分去，再把之前的空间一次性全部清空。</p>
+<ul>
+<li>优点：每次回收都是对整个内存区域的回收，回收效率高，内存分配时也不存在内存碎片，只需要移动堆顶指针，按顺序分配对象。</li>
+<li>缺点：将内存分割为两部分，实际内存利用率低</li>
+</ul>
+<p>商业虚拟机采用这种算法回收新生代。其Eden、From Survivor、To Survivor比例为8:1:1。</p>
+<p><strong style='color:red'>内存分配过程</strong>:</p>
+<ul>
+<li>对象优先分配在 Eden 区，如果 Eden 区无法分配，那么尝试把活着的对象放到<strong>From Survivor</strong>中去（Minor GC）</li>
+</ul>
+<ul>
+<li>如果<strong>From Survivor</strong>可以放入，那么放入之后清除Eden区。</li>
+<li>如果<strong>From Survivor</strong>不可以放入，那么尝试把 Eden 和<strong>From Survivor</strong>的存活对象放到 <strong>To Survivor</strong>中。<ul>
+<li>如果 <strong>To Survivor</strong>可以放入，那么放入 <strong>To Survivor</strong>之后清除 Eden 和<strong>From Survivor</strong>，之后再把<strong>To Survivor</strong>中的对象复制到<strong>From Survivor</strong>中，保持<strong>To Survivor</strong>一直为空。</li>
+<li>如果 <strong>To Survivor</strong> 不可以放入，那么直接把它们放入到老年代中，并清除 Eden 和 <strong>From Survivor</strong>，这个过程也称为<strong>分配担保</strong>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>标记—整理算法</p>
+<p>复制算法在对象存活率高的内存区域中会进行较多的复制操作，效率降低，且会浪费内存空间。标记—整理算法：</p>
+<ul>
+<li>标记，标记过程与标记—清除的标记过程一样。</li>
+<li>整理，让所有存活对象向一端移动，然后直接清除掉边界以外的内存。</li>
+</ul>
+</li>
+<li><p>分代收集算法</p>
+<p>根据对象存活周期将内存区域划分为几块：新生代(Eden、From Survivor、To Survivor)和老年代。根据各自特点采用不同垃圾收集算法。</p>
+<ul>
+<li>新生代，每次垃圾收集都会有大批对象被回收，所以采用复制算法，只需要付出少量的内存空间</li>
+<li>老年代，对象存活、没有额外的空间进行分配担保，标记整理或者标记清除算法。</li>
+</ul>
+</li>
+</ol>
+<h6 id="4-HotSpot算法实现"><a href="#4-HotSpot算法实现" class="headerlink" title="4. HotSpot算法实现"></a>4. HotSpot算法实现</h6><p>实际JVM实现垃圾收集相关算法时，需要对算法有严格的考虑，才能保证虚拟机高效运行。</p>
+<ol>
+<li><p>枚举根节点</p>
+<p>可达性分析中从<strong>GC Roots</strong>节点寻找引用链，可作为<strong>GC Roots</strong>节点主要是全局性的引用(常量或类静态属性)与执行上下文(栈帧中的本地变量)，实际应用中很多方法区达到数百兆，若要逐个检查这里的引用，会消耗很多资源。</p>
+<p>可达性分析，还会造成GC停顿，因为分析工作必须在一个能确保一致性的快照中进行(分析期间整个执行系统停顿，不能出现分析过程中对象引用关系不断变化的情况，否则可达性分析的准确性无法保证)。</p>
+<p>目前主流的Java虚拟机都是准确式GC(虚拟机可以判断内存中对象的类型)，当系统停顿后，虚拟机不需要一个不漏地检查所有执行上下文和全局的引用位置，虚拟机可以知道哪些地方存放着对象引用。在<strong>HotSpot</strong>实现中，是使用一组<strong>OopMap</strong>的数据结构类达到这个目的，类加载完成后，<strong>HotSpot</strong>就把对象内什么偏移量上是什么类型的数据计算出来，在JIT编译过程中，也会在特定位置记录下栈和寄存器中哪些位置是引用，这样GC过程中可以直接得知执行上下文和全局变量位置。</p>
+</li>
+<li><p>安全点(SafePoint)</p>
+<p>通过OopMap，<strong>HotSpot</strong>可以快速准确地完成GC Roots枚举，但是可能会导致引用关系变化，或者说<strong>OopMap</strong>内容变化指令非常多，若每一条指令都生成OopMap，将会浪费大量额外空间，GC成本变高。</p>
+<p><strong>HotSpot</strong>没有为每一条指令生成<strong>OopMap</strong>，而是在特定位置生成了<strong>OopMap</strong>，这些位置即安全点（SafePoint）。程序执行时并非在所有地方都停顿下来执行GC，而是只有在安全点才能暂停。安全点的选择是以程序“是否具有让程序长时间执行下去的特征”为标准进行选定的。“长时间执行”最明显特征是指令复用，例如方法调用、循环跳转、异常跳转等，所以这些具有这些功能的指令才会产生<strong>SafePoint</strong>。</p>
+<p>因为GC时需要程序暂停，但是只能在安全点暂停，所以GC发生时需要保证所有线程（不包括执行JNI调用的线程）都在安全点上，有两种方案：</p>
+<ul>
+<li>抢先式中断(Preemptive Suspension)：不需要线程执行代码主动配合，在发生GC时，首先把所有线程全部中断，若发现存在不在安全点的线程，则恢复线程，直到停顿在安全点。现在几乎没有虚拟机采用抢占式中断。</li>
+<li>主动式中断(Voluntary Suspension)：当GC需要中断线程时，不直接对线程操作，仅仅简单地设置一个标志，各个线程执行时主动去轮询这个标志，发现中断标识为真时就自己中断挂起，轮询标志的地方和安全点是重合的，另外加上创建对象需要分配内存的地方</li>
+</ul>
+</li>
+<li><p>安全区域</p>
+<p><strong>Safe Point</strong>可以解决如何进入GC的问题，但是仅仅保证了程序执行时，在不太长时间内进入<strong>GC</strong>的<strong>Safe Point</strong>，若存在没有分配时间片的线程(Sleep或者Blocked状态)，线程无法响应<strong>JVM</strong>的中断请求，此事需要安全区域(<strong>Safe Region</strong>)解决问题。</p>
+<p>安全区域指一段代码中，引用关系不会发生变化。这个区域中任意地方开始GC都是安全的。线程执行到<strong>Safe Region</strong>中的代码时，首先标识自己已经进入安全区(Safe Region)。当<strong>JVM</strong>发生GC时，就不需要考虑标识为安全区(<strong>Safe Region</strong>)的线程了。线程离开<strong>Safe Region</strong>时，首先检查系统是否完成了根节点枚举（或者整个<strong>GC</strong>过程），若完成线程继续执行，否则必须等待收到可以安全离开的信号为止。</p>
+</li>
+</ol>
+<h6 id="5-垃圾收集器"><a href="#5-垃圾收集器" class="headerlink" title="5. 垃圾收集器"></a>5. 垃圾收集器</h6><p>收集算法是内存回收的方法论，垃圾收集器就是内存回收的实现。Java虚拟机规范对垃圾收集器应该如何实现并没有任何规定，所以不同的厂商、不同的虚拟机所提供的收集器有很大差别，以下是<strong>HosSpot</strong>虚拟机的垃圾收集器。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/06.jpg" alt="HotSpot垃圾收集器"></p>
+<p>上图的7中不同垃圾收集器作用于不同分代。收集器之间有直线，说明可以配合使用。</p>
+<ol>
+<li><p><strong>Serial</strong>收集器</p>
+<p><strong>Serial</strong>收集器是最基本、发展历史最悠久的收集器，其是一个单线程的收集器，进行垃圾收集时，必须暂停其他所有的工作线程，直到收集结束，其他线程的工作由垃圾收集器暂停，所以这对用户不可见，这也对很多应用不友好。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/07.jpg" alt="Serial/Serial Old"></p>
+<p><strong>HotSpot</strong>虚拟机开发团队一直努力消除或者减少工作线程因为内存回收导致的停顿。从<strong>Serial</strong>到<strong>Parallel</strong>，再到<strong>Concurrent Mark Sweep</strong>(CMS)乃至<strong>Garbage First</strong>(G1)收集器。</p>
+<p><strong>Serial</strong>垃圾收集器是虚拟机在Client模式下默认的新生代垃圾收集器。</p>
+<ul>
+<li><font color='red'>优点</font>：简单高效，对象单个CPU的环境，没有多线程交互的开销</li>
+</ul>
+</li>
+<li><p><strong>ParNew</strong>收集器</p>
+<p><strong>ParNew</strong>是Serial收集器的多线程版本，除了多线程进行垃圾收集外，其余行为包括<strong>Serial</strong>收集器可用的所有控制参数、收集算法、Stop The World、对象分配规则、回收策略等都与<strong>Serial</strong>一致。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/08.jpg" alt="ParNew/Serial Old"></p>
+<p><strong>ParNew</strong>是很多运行在Server模式下的虚拟机中的首先新生代收集器，因为除了<strong>Serial</strong>之外，<strong>ParNew</strong>是唯一可以与<strong>CMS</strong>配合使用的垃圾收集器。当使用<code>-XX:+ConcMarkSweepGC</code>参数后，<strong>ParNew</strong>是默认垃圾收集器，<code>-XX:+UseParNewGC</code>指定新生代垃圾收集器。在单线程环境下，<strong>ParNew</strong>不如<strong>Serial</strong>效果好，<strong>ParNew</strong>默认开启的线程数与CPU数量相同，<code>-XX:+ParallelGCThreads</code>限制垃圾收集器的线程数。</p>
+<ul>
+<li>并行(Parallel)，指多条垃圾收集线程并行工作，此时用户线程处于停顿状态。</li>
+<li>并发(Concurrent)，用户与垃圾收集线程同时执行(可能会交替执行，也可能不在一个CPU上)</li>
+</ul>
+</li>
+<li><p><strong>Parallel Scavenge</strong></p>
+<p><strong>Parallel Scavenge</strong>是新生代垃圾收集器，同样是使用复制算法的并行多线程垃圾收集器，其与<strong>ParNew</strong><font color='red'>不同之处</font>：<strong>Parallel Scavenge</strong>目标是达到一个可控制的吞吐量(Throughtput)，即CPU用于运行用户代码的时间与CPU总消耗时间的比值，即<font color='red'>吞吐量=运行用户代码时间/运行用户代码时间+垃圾收集时间</font>。</p>
+<p>停顿时间越短就越适合需要与用户交互的程序，良好的相应速度能提升用户体验，高吞吐量可以高效率地利用CPU，适合在后头运算而不需要太多交互的任务。</p>
+<p><strong>Parallel Scavenge</strong>提供了两个参数用于控制吞吐量。</p>
+<ul>
+<li><code>-XX:+MaxGCPauseMillis</code>，最大垃圾收集停顿时间，大于0ms，垃圾收集器会尽量在规定时间内完成收集，<font color='red'>GC停顿时间缩短是以缩小吞吐量和新生代空间来换取时间的</font>。</li>
+<li><code>-XX:+GCTimeRatio</code>，设置吞吐量大小，0~100之间，垃圾收集时间占总时间的比率，例如：<code>-XX:+GcTimeRatio=19</code>，则运行最大GC时间是总时间的5%（1/1+19）。</li>
+<li><code>-XX:+UseAdaptiveSizePoilcy</code>，开关参数，打开后，不需要指定新生代大小(<code>-Xmn</code>)、Eden与Survivor的比例(<code>-XX:+SurvivorRatio</code>)、晋升老年代对象大小(<code>-XX:+PretenureSizeThreshold</code>)等细节参数，虚拟机会根据当前系统运行情况收集性能监控，动态调整以提供合适的停顿时间或者最大吞吐量，GC自适应调节策略。</li>
+</ul>
+<p>使用<code>-XX:+UseAdaptiveSizePolicy</code>自适应调节策略，加<code>-XX:+MaxGCPauseMillis</code>或<code>-XX:+GCTimeRatio</code>给虚拟机设定一个目标。</p>
+</li>
+<li><p><strong>Serial Old</strong>收集器</p>
+<p><strong>Serial Old</strong>是<strong>Serial</strong>的老年代版本，单线程收集器，使用<font color='red'>标记-整理算法</font>，主要意义在于给Client模式下虚拟机回收老年代使用。</p>
+<ul>
+<li><strong>JDK5</strong>之前的版本中与<code>Parllel Sacvenge</code>搭配使用</li>
+<li>作为CMS收集器的后备预选，在并发收集发生<strong>Concurrent Mode Failure</strong>时使用。</li>
+</ul>
+<p><img src="https://images.effiu.cn/blog/jvm/09.jpg" alt="Serial /Serial Old"></p>
+</li>
+<li><p><strong>Parallel Old</strong>收集器</p>
+<p><strong>Parallel Old</strong>是<strong>Parallel Scavenge</strong>收集器的老年代版本，使用多线程和“标记-整理算法”。其主要是与<strong>Parallel Scavenge</strong>配合使用。“吞吐量”优先收集器的组合，在一些注重吞吐量以及CPU资源敏感的场合，都可以优先考虑<strong>Parallel Scavenge</strong>和<strong>Parallel Old</strong>。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/10.jpg" alt="Parallel Scavenge和Parallel Old"></p>
+</li>
+<li><p><strong>CMS</strong>收集器</p>
+<p>CMS是一种一获取最短回收停顿时间为目标的收集器。基于<font color='red'>标记-清除算法</font>实现，分为4步。</p>
+<ul>
+<li>初始标记(CMS initial mark)，只是标记一个<strong>GC Roots</strong>能直接关联的对象，速度快，需要停顿</li>
+<li>并发标记(CMS concurrent mark)，并发标记是<strong>GC Roots Tracing</strong>的过程</li>
+<li>重新标记(CMS remark)，为了修正并发标记阶段因用户程序继续运作导致标记产生变动的那一部分对象的标记记录，比初始标记停顿时间稍长，远比并发标记时间短</li>
+<li>并发清除(CMS concurrent sweep)</li>
+</ul>
+<p>在整个过程中，最耗时的并发标记与并发清除都可以与工作线程一起工作，所以其是与工作线程并发执行的</p>
+<p><img src="https://images.effiu.cn/blog/jvm/11.jpg" alt="Concurrent Mark Sweep"></p>
+<ul>
+<li><p><font color='red'>CMS优点</font>：并发收集、低停顿</p>
+</li>
+<li><p>缺点：</p>
+<ul>
+<li>CMS收集器对CPU资源非常敏感，会因占用CPU资源导致程序变慢，吞吐量会降低。默认启动的线程数是(CPU数量+3)/4，会随着CPU数量增大占比下降，所以当CPU低于4个时，CMS对程序影响很大</li>
+<li>CMS收集器无法处理浮动垃圾，可能会出现失败导致另一次Full GC产生。所谓浮动垃圾即，CMS无法处理并发清除阶段产生的垃圾，只能留在下一次GC时清除，而且垃圾收集阶段程序会运行，所以需要预留足够的内存空间供程序运行使用，<code>-XX:+CMSInitiatingOccupancyFraction</code>提高触发GC的百分比，以降低内存回收次数。<strong>Concurent Mode Failure</strong>失败会导致虚拟机启动后备预案，临时启用<code>Serial Old</code>收集器重新进行老年代的垃圾收集，所以<code>-XX:+CMSInitiatingOccupancyFraction</code>太高也会导致<strong>Concurent Mode Failure</strong>失败，降低性能。</li>
+</ul>
+<blockquote>
+<p>  浮动垃圾是在并发标记过程中与程序是并行的，这个过程中程序可能会产生新的垃圾(浮动垃圾)，重新标记过程只是修改并发标记过程中的不可达对象，没有办法处理浮动垃圾。</p>
+</blockquote>
+<ul>
+<li>CMS是基于标记-清除算法实现的，会产生大量的内存碎片。<code>-XX:+UseCMSComopacetAtFullConllection</code>开关参数，当CMS顶不住要进行Full GC时开始内存碎片整理合并过程，但是会导致停顿时间变长。<code>-XX:+CMSFullGCsBeforeCompaction</code>表示设置执行多少次不压缩的Full GC后，进行一次带压缩的Full GC，默认每次都带压缩。</li>
+</ul>
+</li>
+<li><p><strong>Concurent Mode Failure</strong>原因主要有两个：</p>
+<ul>
+<li>在年老代被用完之前不能完成对无引用对象的回收</li>
+<li>是当新空间分配请求在年老代的剩余空间中得到满足。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong style='color:red'>G1收集器</strong></p>
+<p><strong>G1</strong>是一款面向服务端应用的垃圾收集器，与CMS相比优点如下：</p>
+<ul>
+<li>并行与并发，G1能充分利用多CPU、多核环境的硬件优势，使用多个CPU缩短停顿时间。</li>
+<li>分代收集，采用不同的方式去处理新生代、老年代的垃圾对象。</li>
+<li>空间整合，整体上看是<font color='red'>标记-整理算法</font>，局部看是复制算法，在GC运行后不会导致内存碎片产生，不会因为无法分配大对象无法找到连续内存空间而提前出发一次GC</li>
+<li>可预测的停顿，可以建立可预测停顿模型，可以在开发者指定时间内完成GC。</li>
+</ul>
+<p><strong>G1</strong>收集器，Java堆的内存与其他收集器不同，其将整个堆内存划分为多个大小相等的<strong>Region</strong>，所以新生代和老年代不再是物理隔离的，是<strong>Region</strong>的集合。</p>
+<p><strong>G1</strong>可以预测停顿时间，是因为可以有计划地避免在整个堆中进行垃圾回收。G1跟踪各个<strong>Region</strong>里面垃圾堆积的价值大小（回收获得的空间大小以及所需要的时间），在后台维护一个优先列表，每次根据允许的时间，优先回收价值最大的<strong>Region</strong>，同时也保证了G1在有限时间内获取尽可能高的收集效率。</p>
+<p><strong>G1</strong>划分<strong>Region</strong>后，<strong>Region</strong>仍不是孤立的，因为对象分配到<strong>Region</strong>后，其可以被其他<strong>Region</strong>内的对象引用。<strong>G1</strong>中<strong>Region</strong>之间的对象引用以及其他收集器中新生代和老年代之间的对象引用，虚拟机使用<strong>Remembered Set</strong>避免全堆扫描。在<strong>G1</strong>中每个<strong>Region</strong>都有一个Remembered Set。当虚拟机发现需要对Reference类型的数据写操作时，会触发一个<strong>Write Barrier</strong>暂时中断写操作，检查<strong>Reference</strong>引用的对象是否处于不同Region中，若是则通过<strong>CardTable</strong>把相关信息记录到被引用对象所属的<strong>Regioin</strong>的<strong>Remebered Set</strong>中，内存回收时在<strong>GC Roots</strong>中加入<strong>Remembered Set</strong>即可保证不对全堆扫描也不会遗漏。</p>
+<p>不包括<strong>Remembered Set</strong>操作，G1收集器分为以下几个步骤：</p>
+<ul>
+<li>初始标记(Initial Marking)，标记GC Roots能直接关联到的对象，并写修改TAMS(Next Top at Mark Start)的值，让下一阶段用户程序并发运行时，能正确在可用的Region中创建对象。需要停顿线程，时间很短</li>
+<li>并发标记(Concurrent Marking)，从GC Roots开始对堆中对象进行可达性分析，找出存活的对象，耗时较长，可以与程序并发运行</li>
+<li>最终标记(Final Marking)，是为了修正并发标记期间因为用户程序继续运行导致标记产生变动的记录，变动记录在<strong>Remebered Set Logs</strong>里面，最终标记会把<strong>Remebered Set Logs</strong>的数据合并到<strong>Remebered Set</strong>中，需要停顿，但是可以并行执行</li>
+<li>筛选回收(Live Data Counting And Evacuation)，对各个Region的回收价值和成本进行排序，根据用户期望指定回收计划，可以并发执行</li>
+</ul>
+<p><img src="https://images.effiu.cn/blog/jvm/12.jpg" alt="G1"></p>
+</li>
+<li><p>理解GC日志</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">33.125：[GC [DefNew：3324K-&gt;152K(3712K),0.0025925 secs] 3324K-&gt;152K(11904K), 0.0031680 secs]</span><br><span class="line">100.667：[Full GC [Tenured：0K-&gt;210K(10240K), 0.0149142 secs]4603K-&gt;210K(19456K), [Perm：2999K-&gt;2999K(21248K)], 0.0150007 secs][Times：user=0.01 sys=0.00, real=0.02 secs]</span><br></pre></td></tr></table></figure>
+
+<ol>
+<li><code>33.125</code>和<code>100.667</code>表示GC发生的时间，从Java虚拟机启动开始计数。</li>
+<li><code>[GC</code>和<code>[Full GC</code>是指垃圾收集的停顿类型，Full说明是带有停顿的过程。<code>System.gc()</code>触发的收集，显示为<code>[Full GC(System)</code>。</li>
+<li><code>[DefNew</code>、<code>[Trnured</code>、<code>[Perm</code>表示GC发生的区域</li>
+<li><code>3324K-&gt;152K(3712K)</code>，是指GC前该区域内存已使用量 -&gt; GC后该区域内控使用量(该区域内存总量)。方括号之外的<code>3324K-&gt;152K(11904K)</code>表示GC前该Java堆已使用量 -&gt; GC后该堆使用量(Java堆总容量)</li>
+<li><code>0.0031680 secs</code>该区域GC占用的时间，单位是秒。</li>
+</ol>
+</li>
+<li><p>垃圾收集器参数总结</p>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="center">参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">UseSerialGC</td>
+<td>Client下的默认值，使用Serial+Serial Old收集器组合回收内存</td>
+</tr>
+<tr>
+<td align="center">UseParNewGC</td>
+<td>使用ParNew+Serial Old收集器组合回收内存</td>
+</tr>
+<tr>
+<td align="center">UseConcMarkSweepGC</td>
+<td>使用ParNew+CMS+Serial Old收集器组合进行内存回收</td>
+</tr>
+<tr>
+<td align="center">UseParallelGC</td>
+<td>Server模式下默认值，Parallel Scavenge+Serial Old回收内存</td>
+</tr>
+<tr>
+<td align="center">UseParallelOldGC</td>
+<td>使用Parallel Scavenge + Parallel Old回收内存</td>
+</tr>
+<tr>
+<td align="center">Survivor Ratio</td>
+<td>Eden与Survivor区域的容量比值，默认为8</td>
+</tr>
+<tr>
+<td align="center">PretenureSizeThreshold</td>
+<td>直接晋升老年代对象大小</td>
+</tr>
+<tr>
+<td align="center">MaxTenureThreshold</td>
+<td>晋升老年代对象的年龄，对象在经过Minor GC后年龄加1</td>
+</tr>
+<tr>
+<td align="center">UseAdativeSizePolicy</td>
+<td>Parallel Scavenge收集器中，动态调整各个区域大小以及进入老年代的年龄</td>
+</tr>
+<tr>
+<td align="center">HandlePromitionFailure</td>
+<td>是否允许分配担保失败，即老年代剩余空间不足以应付新生代整个Eden和Survivor都存活的极端对象</td>
+</tr>
+<tr>
+<td align="center">ParallelGCThreads</td>
+<td>并行GC时启动回收内存线程数</td>
+</tr>
+<tr>
+<td align="center">GCTimeRatio</td>
+<td>Parallel Scavenge 收集器中GC时间占总时间的比率，默认99</td>
+</tr>
+<tr>
+<td align="center">MaxGCPauseMillis</td>
+<td>Parallel Scavenge 收集器设置GC的最大停顿时间</td>
+</tr>
+<tr>
+<td align="center">CMSInitiatingOccupancyFraction</td>
+<td>CMS中触发GC的百分比。</td>
+</tr>
+<tr>
+<td align="center">UseCMSCompactAtFullCollection</td>
+<td>设置CMS收集器完成回收后，是否开启一次内存碎片整理</td>
+</tr>
+<tr>
+<td align="center">CMSFullGCBeforeCompaction</td>
+<td>设置CMS进行若干次后，开启一次内存碎片整理</td>
+</tr>
+</tbody></table>
+<h6 id="6-内存分配与回收策略"><a href="#6-内存分配与回收策略" class="headerlink" title="6.  内存分配与回收策略"></a>6.  内存分配与回收策略</h6><p>内存自动管理技术可以归结为自动化地解决了两个问题：</p>
+<ul>
+<li>对象分配内存，各种GC收集器算法及实现，枚举根节点、安全点、安全区域等<strong>HotSpot</strong>算法等等</li>
+<li>回收对象内存，堆上分配内存，主要分配在Eden上，如果启动了本地线程缓冲，将按线程优先在TLAB上分配。分配规则不是百分百确定，而是当前使用的垃圾收集器组合以及虚拟机参数设置的，以下是主要的内存分配规则<ul>
+<li>对象优先在<strong>Eden</strong>分配</li>
+<li>大对象直接进入老年代</li>
+<li>长期存活的对象进入老年代</li>
+<li>动态对象年龄判定</li>
+<li>空间分配担保</li>
+</ul>
+</li>
+<li>以下举例均以Parallel Scavenge + Parallel Old垃圾收集器组合为例</li>
+</ul>
+<ol>
+<li><p>对象优先在<strong>Eden</strong>分配</p>
+<p>对象优先在<strong>Eden</strong>分配，当<strong>Eden</strong>区域没有足够空间时，虚拟机将发起一次<strong>Minor GC</strong>。<code>-XX:+PringGCDetails</code>，用于打印在GC发生垃圾收集行为时打印内存回收日志，在进程退出时输出当前内存区域分配情况，实际应用中使用日志工具进行分析。</p>
+<ul>
+<li>新生代GC(Minor GC)，指发生在新生代的垃圾收集工作，因为Java对象大多生存时间短，所以Minor GC非常频繁，回收速度很快。</li>
+<li>老年代GC(Major GC/Full GC)，发生在老年代的GC，<strong>Full GC</strong>经常会伴有<strong>Minor GC</strong>，但并不绝对，且<font color='red'>Full GC速度比Minor GC慢10倍以上</font>。</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JvmTest1</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> _1MB = <span class="number">1024</span> * <span class="number">1024</span>;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * VM参数： -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> args</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">byte</span>[] allocation1 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">2</span> * _1MB];</span><br><span class="line">        <span class="keyword">byte</span>[] allocation2 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">2</span> * _1MB];</span><br><span class="line">        <span class="keyword">byte</span>[] allocation3 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">2</span> * _1MB];</span><br><span class="line">        <span class="comment">// 发生了一次GC</span></span><br><span class="line">        <span class="keyword">byte</span>[] allocation4 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>执行结果如下:</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">[GC (Allocation Failure) [PSYoungGen: <span class="number">6906</span>K-&gt;<span class="number">973</span>K(<span class="number">9216</span>K)] <span class="number">6906</span>K-&gt;<span class="number">5077</span>K(<span class="number">19456</span>K), <span class="number">0.0063378</span> secs] [Times: user=<span class="number">0.00</span> sys=<span class="number">0.00</span>, real=<span class="number">0.01</span> secs] </span><br><span class="line">Heap</span><br><span class="line"> PSYoungGen      total <span class="number">9216</span>K, used <span class="number">7439</span>K [<span class="number">0x00000000ff600000</span>, <span class="number">0x0000000100000000</span>, <span class="number">0x0000000100000000</span>)</span><br><span class="line">  eden space <span class="number">8192</span>K, <span class="number">78</span>% used [<span class="number">0x00000000ff600000</span>,<span class="number">0x00000000ffc508d0</span>,<span class="number">0x00000000ffe00000</span>)</span><br><span class="line">  from space <span class="number">1024</span>K, <span class="number">95</span>% used [<span class="number">0x00000000ffe00000</span>,<span class="number">0x00000000ffef3620</span>,<span class="number">0x00000000fff00000</span>)</span><br><span class="line">  to   space <span class="number">1024</span>K, <span class="number">0</span>% used [<span class="number">0x00000000fff00000</span>,<span class="number">0x00000000fff00000</span>,<span class="number">0x0000000100000000</span>)</span><br><span class="line"> ParOldGen       total <span class="number">10240</span>K, used <span class="number">4104</span>K [<span class="number">0x00000000fec00000</span>, <span class="number">0x00000000ff600000</span>, <span class="number">0x00000000ff600000</span>)</span><br><span class="line">  object space <span class="number">10240</span>K, <span class="number">40</span>% used [<span class="number">0x00000000fec00000</span>,<span class="number">0x00000000ff002020</span>,<span class="number">0x00000000ff600000</span>)</span><br><span class="line"> Metaspace       used <span class="number">3484</span>K, capacity <span class="number">4496</span>K, committed <span class="number">4864</span>K, reserved <span class="number">1056768</span>K</span><br><span class="line">  <span class="class"><span class="keyword">class</span> <span class="title">space</span>    <span class="title">used</span> 383<span class="title">K</span>, <span class="title">capacity</span> 388<span class="title">K</span>, <span class="title">committed</span> 512<span class="title">K</span>, <span class="title">reserved</span> 1048576<span class="title">K</span></span></span><br></pre></td></tr></table></figure>
+
+<p><code>byte[] allocation4 = new byte[4 * _1MB];</code>会触发一次<strong>Minor GC</strong>，因为超过了Eden分配空间，<strong>Minor GC</strong>后<code>6906K-&gt;973K(9216K)</code>，说明GC后3个对象分配到了老生代(对象超过Survivor空间大小，所以会通过内存分配担保提前转移到老年代去)。</p>
+</li>
+<li><p>大对象直接进入老年代</p>
+<p>大对象指需要大量连续内存空间的Java对象，最典型的就是很长的字符串以及数组，实际开发中应该尽量避免使用大对象，容易导致还有不少内存空间而触发垃圾收集以获取足够连续内存空间。<code>-XX:PretenureSizeThreshold</code>参数，用于设置超过指定大小后直接分配到老年代分配，这是为了避免在Eden区与Survivor之间发生大量内存复制。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JvmTest2</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> _1MB = <span class="number">1024</span> * <span class="number">1024</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     *  大对象直接进入老年代，但是只对Serial和ParNew有效，Parallel Scavenge无效</span></span><br><span class="line"><span class="comment">     * VM参数： -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8</span></span><br><span class="line"><span class="comment">     *  -XX:+PretenureSizeThreshold=3145728</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> args</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">byte</span>[] allocation1 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>长期存活对象进入老年代</p>
+<p>分代回收对象管理内存，那么内存回收哦时必须知道哪些对象应该放在新生代，哪些在老年代。虚拟机给每个对象定义了一个对象年龄(Age)计数器。Eden -&gt; Surivivor对象年龄设置为1，且每经过一次<strong>Minor GC</strong>，年龄加1,当达到一定次数后将会晋升到老年代。<code>-XX:MaxTenuringThreshold</code>设置年龄阈值。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JvmTest3</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> _1MB = <span class="number">1024</span> * <span class="number">1024</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 对象优先在Eden分配</span></span><br><span class="line"><span class="comment">     * VM参数： -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8</span></span><br><span class="line"><span class="comment">     * -XX:MaxTenuringThreshold=1</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> args</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">byte</span>[] allocation1 = <span class="keyword">new</span> <span class="keyword">byte</span>[_1MB / <span class="number">4</span>];</span><br><span class="line">        <span class="keyword">byte</span>[] allocation2 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">        <span class="comment">// 会发生一次Minor GC，-XX:MaxTenuringThreshold=1，第二次GC直接进入老年代</span></span><br><span class="line">        <span class="keyword">byte</span>[] allocation3 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">        allocation3 = <span class="keyword">null</span>;</span><br><span class="line">        <span class="comment">// 发生了一次GC</span></span><br><span class="line">        allocation3 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>对象年龄判定</p>
+<p>为了更好适应不同程序的内存状况，虚拟机并不是永远要求对象年龄必须达到阈值(MaxTenuringThreshold)才会晋升到老年代。当Survivor空间中相同年龄所有对象大小的和大于Survivor空间的一半，年龄大于等于该年龄的对象就可以直接晋升到老年代。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JvmTest4</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> _1MB = <span class="number">1024</span> * <span class="number">1024</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 对象优先在Eden分配</span></span><br><span class="line"><span class="comment">     * VM参数： -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8</span></span><br><span class="line"><span class="comment">     * -XX:MaxTenuringThreshold=1</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> args</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">byte</span>[] allocation1 = <span class="keyword">new</span> <span class="keyword">byte</span>[_1MB / <span class="number">4</span>];</span><br><span class="line">        <span class="comment">// allocation1 + allocation2大于Survivor空间一半</span></span><br><span class="line">        <span class="keyword">byte</span>[] allocation2 = <span class="keyword">new</span> <span class="keyword">byte</span>[_1MB / <span class="number">4</span>];</span><br><span class="line">        <span class="keyword">byte</span>[] allocation3 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">        <span class="keyword">byte</span>[] allocation4 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">        allocation4 = <span class="keyword">null</span>;</span><br><span class="line">        allocation4 = <span class="keyword">new</span> <span class="keyword">byte</span>[<span class="number">4</span> * _1MB];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>空间分配担保</p>
+<p>发生<strong>Minor GC</strong>之前，虚拟机会先检查老年代最大可用的连续空间是否大于新生代所有对象总空间，成立则<strong>Minor GC</strong>是安全的，不成立则虚拟机会查看<code>-XX:HandlePromotionFailure</code>设置的值是否允许担保失败。若允许则会继续判断老年代最大可哟连续空间是否大于历次晋升到老年代对象的平均大小，若大于则尝试进行一次<strong>Minor GC</strong>（可能会有风险），若小于或者<code>-XX:HandlePromotionFailure</code>设置为不允许冒险，则改为进行一次<strong>Full GC</strong>。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">public class JVMTest5 &#123;</span><br><span class="line"></span><br><span class="line">    private static final int _1MB &#x3D; 1024 * 1024;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 对象优先在Eden分配</span><br><span class="line">     * VM参数： -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio&#x3D;8 -XX:-HandlePromotionALot</span><br><span class="line">     * @param args</span><br><span class="line">     *&#x2F;</span><br><span class="line">    public static void main(String[] args) &#123;</span><br><span class="line">        byte[] allocation1 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        &#x2F;&#x2F; allocation1 + allocation2大于Survivor空间一半</span><br><span class="line">        byte[] allocation2 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        byte[] allocation3 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        allocation1 &#x3D; null;</span><br><span class="line">        byte[] allocation4 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        byte[] allocation5 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        byte[] allocation6 &#x3D; new byte[2 * _1MB];</span><br><span class="line">        allocation4 &#x3D; null;</span><br><span class="line">        allocation5 &#x3D; null;</span><br><span class="line">        allocation6 &#x3D; null;</span><br><span class="line">        byte[] allocation7 &#x3D; new byte[4 * _1MB];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+</li>
+</ol>
+<h6 id="7-总结"><a href="#7-总结" class="headerlink" title="7. 总结"></a>7. 总结</h6><p>介绍了垃圾收集器特点以及运作原理，验证了Java虚拟机分配内存以及回收的主要规则。内存回收与垃圾收集器很多时候是影响系统性能、并发能力的主要因素之一。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/07/jvm/2_memory/" rel="prev" title="Java内存区域与内存溢出">
+      <i class="fa fa-chevron-left"></i> Java内存区域与内存溢出
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/10/mysql/1_first_mysql/" rel="next" title="认识MqSQL">
+      认识MqSQL <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

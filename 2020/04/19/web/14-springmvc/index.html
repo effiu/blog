@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Spring MVC的工作机制">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Spring MVC的工作机制与设计模式">
+<meta property="og:url" content="https://www.effiu.cn/2020/04/19/web/14-springmvc/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Spring MVC的工作机制">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/79.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/80.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/81.png">
+<meta property="article:published_time" content="2020-04-19T15:29:00.000Z">
+<meta property="article:modified_time" content="2020-07-19T11:39:01.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="spring">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/79.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/04/19/web/14-springmvc/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Spring MVC的工作机制与设计模式 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-Spring-MVC%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">1.</span> <span class="nav-text">1. Spring MVC的工作机制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Controller%E8%AE%BE%E8%AE%A1"><span class="nav-number">2.</span> <span class="nav-text">2. Controller设计</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-HandlerMapping"><span class="nav-number">2.1.</span> <span class="nav-text">1. HandlerMapping</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-HandlerAdapter%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">2.2.</span> <span class="nav-text">2. HandlerAdapter初始化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-Controller%E7%9A%84%E8%B0%83%E7%94%A8%E9%80%BB%E8%BE%91"><span class="nav-number">2.3.</span> <span class="nav-text">3. Controller的调用逻辑</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-View-And-Model"><span class="nav-number">3.</span> <span class="nav-text">3. View And Model</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/04/19/web/14-springmvc/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Spring MVC的工作机制与设计模式
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-04-19 23:29 23:29:00" itemprop="dateCreated datePublished" datetime="2020-04-19T23:29:00+08:00">2020-04-19 23:29</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-07-19 19:39 19:39:01" itemprop="dateModified" datetime="2020-07-19T19:39:01+08:00">2020-07-19 19:39</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/04/19/web/14-springmvc/" class="post-meta-item leancloud_visitors" data-flag-title="Spring MVC的工作机制与设计模式" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/04/19/web/14-springmvc/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/04/19/web/14-springmvc/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Spring MVC的工作机制</p>
+<a id="more"></a>
+
+
+<h2 id="1-Spring-MVC的工作机制"><a href="#1-Spring-MVC的工作机制" class="headerlink" title="1. Spring MVC的工作机制"></a>1. Spring MVC的工作机制</h2><p>Spring MVC的核心是<code>org.springframework.web.servlet.DispatcherServlet</code>。实际上Spring MVC非常简单，我们只需要提供一个路径映射关系；定义一个业务逻辑的处理流程规则，以及视图解析器，Spring MVC就可以帮助我们完成所有的MVC功能了，甚至目前视图解析器已经不流行了。<code>DispatcherServlet</code>类依赖关系图:</p>
+<p><img src="https://images.effiu.cn/blog/web/79.png" alt="DispatcherServlet类依赖关系"></p>
+<p>从上面的依赖关系图可以发现，<code>DispathcerServlet</code>类继承了<code>HttpServlet</code>，在Servlet的init方法调用时执行Spring MVC的初始化工作。Spring的工作流程主要在<code>DispatcherServlet</code>的<code>initStrategies</code>方法中</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">void</span> <span class="title">initStrategies</span><span class="params">(ApplicationContext context)</span> </span>&#123;</span><br><span class="line">    initMultipartResolver(context);</span><br><span class="line">    initLocaleResolver(context);</span><br><span class="line">    initThemeResolver(context);</span><br><span class="line">    initHandlerMappings(context);</span><br><span class="line">    initHandlerAdapters(context);</span><br><span class="line">    initHandlerExceptionResolvers(context);</span><br><span class="line">    initRequestToViewNameTranslator(context);</span><br><span class="line">    initViewResolvers(context);</span><br><span class="line">    initFlashMapManager(context);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>initMultipartResolver</code>，初始化<code>MultipartResolver</code>，用于处理文件上传服务器，若有文件上传，那么会将当前的<code>HttpServletRequest</code>包装成<code>DefaultMultipartHttpServletRequest</code>，且将每个用于上传的内容封装成<code>CommonsMultipartFile</code>对象。</li>
+<li><code>initLocaleResolver</code>，处理应用的国际化问题，通过解析请求的Locale和设置相应的Locale来控制应用中的字符编码问题</li>
+<li><code>initThemeResolver</code>，用于定义一个主题，例如可以根据用户的喜好来设置用户访问的页面的样式。</li>
+<li><code>initHandlerMappings</code>，用于定义用户设置的请求映射关系，<code>HandlerMapping</code>接口的实现类会把用户定义的URL映射成一个Handler实例。</li>
+<li><code>initHandlerAdapters</code>，用于根据<code>Handler</code>的类型定义不同的处理机制。</li>
+<li><code>initHandlerExceptionResolvers</code>，当Handler处理出错时，会通过这个Handler来统一处理，默认实现类是<code>SimpleMappingExceptionResolver</code>，将错误日志记录在log中，且重定向到默认的错误页面。</li>
+<li><code>initRequestToViewNameTranslator</code>，将指定的<code>ViewName</code>按照定义的<code>RequestToViewNameTranslator</code>替换成想要的格式，例如加上前缀或者后缀等。</li>
+<li><code>initViewResolvers</code>，用于将View解析成页面，<code>ViewResolvers</code>中可以设置解析策略。默认是<code>InternalResourceViewResolver</code>，按照JSP页面来解析。</li>
+</ul>
+<p>上面是Spring的整个流程，在一个请求中可能需要我们来扩展的地方都定义了扩展点，只需要实现相应的接口类，并创建一个Spring Bean就可以拓展Spring MVC框架。</p>
+<p>Spring MVC中，只有3个组件是用户必须要定义和扩展的：定义URL映射规则、实现业务逻辑的Handler实例对象、渲染模版资源。</p>
+<p><code>DispatcherServlet</code>的启动流程：HttpServlet初始化调用了<code>HttpServletBean</code>的<code>init</code>方法，该方法的作用是获取Servlet中的init参数，并创建一个<code>BeanWrapper</code>对象，然后由子类执行BeanWrapper的初始化工作，查看源码可以发现目前<code>BeanWrapper</code>没有任何作用，因为其没有任何实现。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">void</span> <span class="title">init</span><span class="params">()</span> <span class="keyword">throws</span> ServletException </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (logger.isDebugEnabled()) &#123;</span><br><span class="line">        logger.debug(<span class="string">&quot;Initializing servlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27;&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Set bean properties from init parameters.</span></span><br><span class="line">    PropertyValues pvs = <span class="keyword">new</span> ServletConfigPropertyValues(getServletConfig(), <span class="keyword">this</span>.requiredProperties);</span><br><span class="line">    <span class="keyword">if</span> (!pvs.isEmpty()) &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            BeanWrapper bw = PropertyAccessorFactory.forBeanPropertyAccess(<span class="keyword">this</span>);</span><br><span class="line">            ResourceLoader resourceLoader = <span class="keyword">new</span> ServletContextResourceLoader(getServletContext());</span><br><span class="line">            bw.registerCustomEditor(Resource.class, <span class="keyword">new</span> ResourceEditor(resourceLoader, getEnvironment()));</span><br><span class="line">            <span class="comment">// 目前没有类实现改方法</span></span><br><span class="line">            initBeanWrapper(bw);</span><br><span class="line">            bw.setPropertyValues(pvs, <span class="keyword">true</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">catch</span> (BeansException ex) &#123;</span><br><span class="line">            <span class="keyword">if</span> (logger.isErrorEnabled()) &#123;</span><br><span class="line">                logger.error(<span class="string">&quot;Failed to set bean properties on servlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27;&quot;</span>, ex);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">throw</span> ex;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Let subclasses do whatever initialization they like.</span></span><br><span class="line">    <span class="comment">// FrameworkServlet等类实现了该方法</span></span><br><span class="line">    initServletBean();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (logger.isDebugEnabled()) &#123;</span><br><span class="line">        logger.debug(<span class="string">&quot;Servlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27; configured successfully&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Spring容器的真正创建是在<code>FrameworkServlet</code>的<code>initServletBean</code>方法中完成的，这个方法会创建<code>WebApplicationContext</code>对象，并调用其<code>refresh</code>方法完成配置文件的加载。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">final</span> <span class="keyword">void</span> <span class="title">initServletBean</span><span class="params">()</span> <span class="keyword">throws</span> ServletException </span>&#123;</span><br><span class="line">    getServletContext().log(<span class="string">&quot;Initializing Spring FrameworkServlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27;&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">this</span>.logger.isInfoEnabled()) &#123;</span><br><span class="line">        <span class="keyword">this</span>.logger.info(<span class="string">&quot;FrameworkServlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27;: initialization started&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">long</span> startTime = System.currentTimeMillis();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 创建WebApplicationContexgt,并调用其refresh方法完成配置文件的加载,</span></span><br><span class="line">        <span class="comment">// 还会调用DispatcherServlet的onRefresh方法，触发DispatcherServlet的初始化工作</span></span><br><span class="line">        <span class="comment">// onRefresh方法调用的是initStrategies方法</span></span><br><span class="line">        <span class="keyword">this</span>.webApplicationContext = initWebApplicationContext();</span><br><span class="line">        initFrameworkServlet();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">catch</span> (ServletException ex) &#123;</span><br><span class="line">        <span class="keyword">this</span>.logger.error(<span class="string">&quot;Context initialization failed&quot;</span>, ex);</span><br><span class="line">        <span class="keyword">throw</span> ex;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">catch</span> (RuntimeException ex) &#123;</span><br><span class="line">        <span class="keyword">this</span>.logger.error(<span class="string">&quot;Context initialization failed&quot;</span>, ex);</span><br><span class="line">        <span class="keyword">throw</span> ex;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">this</span>.logger.isInfoEnabled()) &#123;</span><br><span class="line">        <span class="keyword">long</span> elapsedTime = System.currentTimeMillis() - startTime;</span><br><span class="line">        <span class="keyword">this</span>.logger.info(<span class="string">&quot;FrameworkServlet &#x27;&quot;</span> + getServletName() + <span class="string">&quot;&#x27;: initialization completed in &quot;</span> +</span><br><span class="line">                         elapsedTime + <span class="string">&quot; ms&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Spring MVC初始化时序图如下：</p>
+<p><img src="https://images.effiu.cn/blog/web/80.png" alt="Spring MVC初始化时序图"></p>
+<h2 id="2-Controller设计"><a href="#2-Controller设计" class="headerlink" title="2. Controller设计"></a>2. Controller设计</h2><h3 id="1-HandlerMapping"><a href="#1-HandlerMapping" class="headerlink" title="1. HandlerMapping"></a>1. HandlerMapping</h3><p>Spring MVC的Control主要由<code>HandlerMapping</code>和<code>HandlerAdapters</code>两个组件提供。<code>HandlerMapping</code>负责映射用户的URL和对应的处理类，<code>HandlerMapping</code>没有规定URL与相应的处理类如何映射，只是定义了根据一个URL必须返回一个由<code>HandlerExecutionChain</code>代表的处理链，我们可以在这个处理链中添加任意的<code>HandlerAdapters</code>实例处理URL对应的请求。</p>
+<p>Spring MVC默认的<code>HandlerMapping</code>是<code>BeanNameUrlHandlerMapping</code>，可以根据Bean的name属性映射到URL中。其作用就是帮助管理URL和处理类的映射关系，简单理解，就是将一个或者多个URL映射到一个或者多个Spring Bean中。</p>
+<p>以<code>SimpleUrlHandlerMapping</code>为例说明Spring MVC将请求URL映射到Bean。Spring MVC提供了一个<code>AbstractHandlerMapping</code>，其还实现了<code>Ordered</code>接口并继承了<code>WebApplicationObjectSupport</code>类，可以让<code>HandlerMapping</code>通过设置<code>setOrder</code>方法提高优先级，通过覆盖<code>initApplicationContext</code>方法实现初始化一些工作。</p>
+<p>HandlerMapping的初始化工作完成的两个最重要的工作就是将URL与Handler的对应关系保存到HandlerMap集合中，并将所有interceptors对象保存到<code>adaptedInterceptors</code>数组中，等请求到后执行所有的adaptedInterceptors数组中的对象。所有的interceptor对象都必须实现HandlerInterceptor接口。</p>
+<h3 id="2-HandlerAdapter初始化"><a href="#2-HandlerAdapter初始化" class="headerlink" title="2. HandlerAdapter初始化"></a>2. HandlerAdapter初始化</h3><p>Spring MVC中提供了HandlerAdapter的实现类。具体见下图:</p>
+<p><img src="https://images.effiu.cn/blog/web/81.png" alt="HandlerAdapter实现类图"></p>
+<p>具体区分<code>HandlerAdapter</code>可以根据其<code>supports</code>方法。例如: <code>SimpleControllerHandlerAdapter</code>的<code>supports</code>方法，可以判断其可以继承Controller接口。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">supports</span><span class="params">(Object handler)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> (handler <span class="keyword">instanceof</span> Controller);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>SimpleServletHandlerAdapter</code>可以继承<code>Servlet</code>接口等。</p>
+<p><code>HandlerAdapter</code>的初始化比较简单，只是单调创建一个<code>HandlerAdapter</code>对象，并把这个对象保存到<code>DispatcherServlet</code>的<code>handlerAdapters</code>中。当Spring MVC将某个URL映射到某个Handler时，在handlerAdapters集合中查询哪个<code>HandlerAdapter</code>对象supports这个Handler，在确定HandlerAdapter后执行对应的<code>handle</code>方法。例如：</p>
+<ul>
+<li><p><code>SimpleControllerHandlerAdapter</code>的handle方法是</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ModelAndView <span class="title">handle</span><span class="params">(HttpServletRequest request, HttpServletResponse response, Object handler)</span></span></span><br><span class="line"><span class="function">			<span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> ((Controller) handler).handleRequest(request, response);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>SimpleServletHandlerAdapter</code>则是</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">((Servlet) handler).service(request, response);</span><br><span class="line"><span class="keyword">return</span> <span class="keyword">null</span>;</span><br></pre></td></tr></table></figure>
+
+</li>
+</ul>
+<h3 id="3-Controller的调用逻辑"><a href="#3-Controller的调用逻辑" class="headerlink" title="3. Controller的调用逻辑"></a>3. Controller的调用逻辑</h3><p>整个Spring MVC的调用时从<code>DispatcherServlet</code>的<code>doService</code>方法开始的，在该方法中会将<code>ApplicationContext</code>、<code>localeResolver</code>、<code>themeResolver</code>等对象添加到request中，然后调用<code>doDispatcher</code>方法，这才是处理用户请求的地方。</p>
+<p>Controller的处理逻辑关键是<code>DispatcherServlet</code>的<code>handlerMappings</code>集合中根据请求的URL匹配每个<code>HandlerMapping</code>对象中的某个Handler，匹配成功后返回这个Handler的处理链<code>HandlerExecutionChain</code>对象，这个对象中还包含用户自定义的多个<code>HandlerInterceptor</code>对象。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">interface</span> <span class="title">HandlerInterceptor</span> </span>&#123;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">default</span> <span class="keyword">boolean</span> <span class="title">preHandle</span><span class="params">(HttpServletRequest request, HttpServletResponse response, Object handler)</span></span></span><br><span class="line"><span class="function">			<span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">	&#125;</span><br><span class="line">    <span class="function"><span class="keyword">default</span> <span class="keyword">void</span> <span class="title">postHandle</span><span class="params">(HttpServletRequest request, HttpServletResponse response, Object handler,</span></span></span><br><span class="line"><span class="function"><span class="params">			<span class="meta">@Nullable</span> ModelAndView modelAndView)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">	&#125;</span><br><span class="line">    <span class="function"><span class="keyword">default</span> <span class="keyword">void</span> <span class="title">afterCompletion</span><span class="params">(HttpServletRequest request, HttpServletResponse response, Object handler,</span></span></span><br><span class="line"><span class="function"><span class="params">			<span class="meta">@Nullable</span> Exception ex)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>preHandle</code>，在Handler执行前执行</li>
+<li><code>postHandle</code>，在Handler执行后执行</li>
+<li><code>afterCompletion</code>，DispatcherServlet返回之前执行，若preHandle返回false，时，当前请求执行完<code>afterCompletion</code>后直接返回，Handler也将不执行</li>
+</ul>
+<h2 id="3-View-And-Model"><a href="#3-View-And-Model" class="headerlink" title="3. View And Model"></a>3. View And Model</h2><p>目前流行的是返回JSON格式的字符串。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/spring/" rel="tag"># spring</a>
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/19/web/13-springframework/" rel="prev" title="Spring框架的设计理念与设计模式分析">
+      <i class="fa fa-chevron-left"></i> Spring框架的设计理念与设计模式分析
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/05/04/java/HikariCP/" rel="next" title="HikariCP">
+      HikariCP <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

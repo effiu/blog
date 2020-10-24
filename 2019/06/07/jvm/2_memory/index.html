@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="对于Java程序员来说，自动内存管理机制使得不用关系对象的创建与销毁，也不容易出现内存溢出和内存泄露的问题，但是一旦出现内存溢出和内存泄露，如果不了解虚拟机运行机制，将会对排查问题造成很大的困扰  1. 运行时数据区域Java虚拟机在执行Java程序过程中会把内存区域分为若干不同的数据区域。  程序计数器 程序计数器(Program Counter Register)是一块较小的内存空间，用于记">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java内存区域与内存溢出">
+<meta property="og:url" content="https://www.effiu.cn/2019/06/07/jvm/2_memory/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="对于Java程序员来说，自动内存管理机制使得不用关系对象的创建与销毁，也不容易出现内存溢出和内存泄露的问题，但是一旦出现内存溢出和内存泄露，如果不了解虚拟机运行机制，将会对排查问题造成很大的困扰  1. 运行时数据区域Java虚拟机在执行Java程序过程中会把内存区域分为若干不同的数据区域。  程序计数器 程序计数器(Program Counter Register)是一块较小的内存空间，用于记">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/04.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/05.png">
+<meta property="article:published_time" content="2019-06-07T10:53:00.000Z">
+<meta property="article:modified_time" content="2019-07-13T14:17:40.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/jvm/04.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/06/07/jvm/2_memory/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Java内存区域与内存溢出 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E8%BF%90%E8%A1%8C%E6%97%B6%E6%95%B0%E6%8D%AE%E5%8C%BA%E5%9F%9F"><span class="nav-number">1.</span> <span class="nav-text">1. 运行时数据区域</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E5%AF%B9%E8%B1%A1%E6%8E%A2%E7%A7%98"><span class="nav-number">2.</span> <span class="nav-text">2. 对象探秘</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-OutOfMemoryError%E5%BC%82%E5%B8%B8"><span class="nav-number">3.</span> <span class="nav-text">3. OutOfMemoryError异常</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/06/07/jvm/2_memory/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java内存区域与内存溢出
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-06-07 18:53 18:53:00" itemprop="dateCreated datePublished" datetime="2019-06-07T18:53:00+08:00">2019-06-07 18:53</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-07-13 22:17 22:17:40" itemprop="dateModified" datetime="2019-07-13T22:17:40+08:00">2019-07-13 22:17</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/06/07/jvm/2_memory/" class="post-meta-item leancloud_visitors" data-flag-title="Java内存区域与内存溢出" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/06/07/jvm/2_memory/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/06/07/jvm/2_memory/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p>对于Java程序员来说，自动内存管理机制使得不用关系对象的创建与销毁，也不容易出现内存溢出和内存泄露的问题，但是一旦出现内存溢出和内存泄露，如果不了解虚拟机运行机制，将会对排查问题造成很大的困扰</p>
+</blockquote>
+<h6 id="1-运行时数据区域"><a href="#1-运行时数据区域" class="headerlink" title="1. 运行时数据区域"></a>1. 运行时数据区域</h6><p><strong>Java</strong>虚拟机在执行Java程序过程中会把内存区域分为若干不同的数据区域。</p>
+<ol>
+<li><p>程序计数器</p>
+<p>程序计数器(Program Counter Register)是一块较小的内存空间，用于记录当前线程执行的字节码的行号。在虚拟机概念模型中，字节码解释器工作时是通过改变计数器的值来新选择将要执行的字节码指令，分支、循环、跳转、异常处理、线程恢复等基础功能都需要依赖这个计数器完成。</p>
+<p>由于Java虚拟机的多线程是通过线程切换并分配时间片的方式实现的，那么任何一个确定的时刻，<strong style='color:red'>一个处理器或者内核都只会执行一个线程中的一条指令，为了切换线程后能恢复到正确的执行位置，每个线程都需要一个计数器，所以是线程私有的</strong>。</p>
+</li>
+<li><p><strong>Java</strong>虚拟机栈</p>
+<p><strong>Java</strong>虚拟机栈是线程私有。描述的是<strong>Java</strong>方法执行的<strong style='color:red'>内存模型</strong>：每个方法在执行时都会创建一个栈帧，用于存储<strong>局部变量</strong>、<strong>操作数栈</strong>、<strong>动态链接</strong>、<strong>方法出口信息</strong>等，一个方法的调用过程就对应着一个栈帧在虚拟机栈的入栈到出栈过程。</p>
+<p>局部变量存放了编译期可知的各种基本数据类型、对象引用（Reference类型，不是对象本身，可能是指向对象的引用指针，可能是一个代表对象的句柄或其他与对象相关的位置）和<strong>returnAddress</strong>类型（指向一条字节码指令地址）</p>
+<p>针对虚拟机栈有两种异常情况：</p>
+<ul>
+<li>线程请求的栈深度大于虚拟机锁允许的深度，<code>StackOverflowError</code></li>
+<li>Java虚拟机允许动态扩展，当扩展时无法申请到足够的内存，<code>OutOfMemoryError</code></li>
+</ul>
+</li>
+<li><p>本地方法栈</p>
+<p>与虚拟机栈类似，用于虚拟机使用的<strong>Native</strong>方法。也会抛出<code>StackOverflowError</code>和<code>OutOfMemoryError</code></p>
+</li>
+<li><p><strong>Java</strong>堆</p>
+<p><strong>Java</strong>堆是虚拟机所管理内存中最大的一块，是被所有线程共享的区域。用于存放对象实例（所有对象实例以及数组都要在堆上分配）。随着<strong>JIT</strong>编译器的发展与逃逸分析技术的成熟，栈上分配、标量替换将会导致其他情况发生。</p>
+<p><strong>Java</strong>堆是垃圾收集器管理的主要区域。算法是分代收集算法。Java堆中分为<strong>新生代和老生代</strong>，<strong>新生代分为Eden空间、From Survivor空间、To Survivor空间</strong>。<strong>Java</strong>堆中还可能会划分出多个线程私有的分配缓冲区（Thread Local Allocation Buffer），是为了更好地回收内存，更快地分配内存。</p>
+</li>
+<li><p>方法区</p>
+<p>方法区是各个线程共享的内存区域。用于存储被<strong>虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码</strong>等数据。Java虚拟机对方法区的限制比较宽松，甚至可以不实现垃圾收集，<strong style='color:red'>这个区域的内存回收目标主要是针对常量池的回收和对类型的卸载</strong>。</p>
+</li>
+<li><p>运行时常量池</p>
+<p>运行时常量池（Runtime Constant Pool）是方法区的一部分，所以也受方法区内存限制，会抛出<code>OutOfMemoryError</code>。Class文件中除了包括类的版本、字段、方法接口等描述信息，还包含常量池，<strong style='color:red'>用于记录编译器生成的各种字面量和符号引用</strong>。运行期也允许将新的常量方法常量池中。</p>
+</li>
+<li><p>直接内存</p>
+<p>直接内存（Direct Memory）并不是虚拟机运行时数据区的一部分，也不是Java规范中定义的内存区域，但是这部分内存也会被频繁地使用。</p>
+<p>NIO（New Input/Output）类，引入了一种基于通道与缓冲区的I/O方式，其可以使用<strong>Native</strong>函数直接分配堆外内存，通过一个存储在<strong>Java</strong>堆中的<code>DirectByteBuffer</code>对象作为这块内存的引用进行操作，显著地提高了性能，避免了在Java堆和Native堆中频繁地复制。</p>
+<p>直接内存不受Java堆大小限制，受限于本机总内存大小以及处理器寻址空间限制。</p>
+</li>
+</ol>
+<h6 id="2-对象探秘"><a href="#2-对象探秘" class="headerlink" title="2. 对象探秘"></a>2. 对象探秘</h6><p>HotSpot虚拟机在Java堆中对象分配、布局和访问的全过程。</p>
+<ol>
+<li><p>对象的创建（仅仅包含Java普通对象，不包括数组和Class对象等）</p>
+<ul>
+<li>虚拟机遇到<code>new</code>指令时，首先去检查这个指令的参数是否能在常量池中定位到一个类的符号引用，且检查这个符号引用代表的类是否已被加载、解析和初始化过，若没有则必须执行类加载过程。</li>
+<li>当类加载检查通过后，虚拟机将直接在Java堆中为对象分配内存，且对象需要的内存大小在类加载完成后便可以完全确定，这个分配空间的任务即把一块大小确定的内存从Java堆中划分出来。<ul>
+<li><strong>指针碰撞</strong>，当Java堆中内存是绝对规整的，那么所有用过的内存放在一边，未被使用的在另一边，中间放着一个指针作为分界点的指示器，那么分配内存仅仅是移动指针，例如，<strong>Serial</strong>、<strong>ParNew</strong>等带有<strong>compact</strong>过程的收集器</li>
+<li><strong>空闲列表</strong>，当内存不规整时，就需要虚拟机维护一个列表，记录内存块是否可用，分配对象时从可用列表中找到一块足够大的空间，并更新列表的记录，例如<strong>CMS</strong>使用标记清除算法的虚拟机</li>
+</ul>
+</li>
+<li>并发情况下，在虚拟机中创建对象是非常频繁的，可能会出现对象A分配内存，指针没来得及修改，就会被其他对象访问，解决这种问题的方案:<ul>
+<li>对分配内存空间的动作进行同步处理—虚拟机采用<font color='red'>CAS加失败重试</font>保证更新操作的原子性</li>
+<li>把分配的动作按照线程划分在不同的空间之中进行，即每个线程在Java堆中预先  分配一小块内存，即本地线程分配缓冲(Thread Local Allocation Buffer，TLAB)。<code>-XX:+/-UseTLAB</code>设定</li>
+</ul>
+</li>
+<li>内存分配完成后，虚拟机会将内存空间都初始化为零值（不包括对象头），如果使用<strong>TLAB</strong>，这一工作过程可以提前至TLAB分配时进行，其保证了对象的实例字段在Java代码中未真正初始化就可被使用（虚拟机初始化完成）</li>
+<li>虚拟机对对象头进行必要的设置，例如对象是哪个类的实例、如何才能找到类的元数据信息、对象的哈希码、对象的GC分代年龄等信息，另外会根据虚拟机当前运行状态不同(是否持有偏向锁等)对象头会有不同的设置方式</li>
+<li>此时虚拟机已经完成初始化，但对象的创建刚刚开始—<init>方法未执行，所有的字段未真正初始化（虚拟机初始化完成，字段仍是零），<init>会执行对象的初始化过程。</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//确保常量池中存放的是已解释的类</span></span><br><span class="line"><span class="keyword">if</span>（！constants-＞tag_at（index）.is_unresolved_klass（））&#123;</span><br><span class="line">	<span class="comment">//断言确保是klassOop和instanceKlassOop（这部分下一节介绍）</span></span><br><span class="line">	oop entry=（klassOop）*constants-＞obj_at_addr（index）；</span><br><span class="line">	assert（entry-＞is_klass（），<span class="string">&quot;Should be resolved klass&quot;</span>）；</span><br><span class="line">	klassOop k_entry=（klassOop）entry；</span><br><span class="line">	assert（k_entry-＞klass_part（）-＞oop_is_instance（），<span class="string">&quot;Should be instanceKlass&quot;</span>）；</span><br><span class="line">	instanceKlass * ik=（instanceKlass*）k_entry-＞klass_part（）；</span><br><span class="line">	<span class="comment">//确保对象所属类型已经经过初始化阶段</span></span><br><span class="line">	<span class="keyword">if</span>（ik-＞is_initialized（）＆＆ik-＞can_be_fastpath_allocated（））&#123;</span><br><span class="line">    	<span class="comment">//取对象长度</span></span><br><span class="line">		<span class="keyword">size_t</span> obj_size=ik-＞size_helper（）；</span><br><span class="line">		oop result=<span class="literal">NULL</span>；</span><br><span class="line">		<span class="comment">//记录是否需要将对象所有字段置零值</span></span><br><span class="line">		<span class="keyword">bool</span> need_zero=！ZeroTLAB；</span><br><span class="line">		<span class="comment">//是否在TLAB中分配对象</span></span><br><span class="line">        <span class="keyword">if</span>（UseTLAB）&#123;</span><br><span class="line">        	result=（oop）THREAD-＞tlab（）.allocate（obj_size）；</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span>（result==<span class="literal">NULL</span>）&#123;</span><br><span class="line">            need_zero=<span class="literal">true</span>；</span><br><span class="line">            <span class="comment">//直接在eden中分配对象</span></span><br><span class="line">            retry：</span><br><span class="line">			HeapWord * compare_to=*Universe：heap（）-＞top_addr（）；</span><br><span class="line">			HeapWord * new_top=compare_to+obj_size；</span><br><span class="line">			<span class="comment">/*cmpxchg是x86中的CAS指令，这里是一个C++方法，通过CAS方式分配空间，如果并发失败，转到retry中重试，直至成功分配为止*/</span></span><br><span class="line">			<span class="keyword">if</span>（new_top＜=*Universe：heap（）-＞end_addr（））&#123;</span><br><span class="line">				<span class="keyword">if</span>（Atomic：cmpxchg_ptr（new_top,Universe：heap（）-＞top_addr（），compare_to）！=compare_to）&#123;</span><br><span class="line">					<span class="keyword">goto</span> retry；</span><br><span class="line">				&#125;</span><br><span class="line">                result=（oop）compare_to；</span><br><span class="line">			&#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span>（result！=<span class="literal">NULL</span>）&#123;</span><br><span class="line">			<span class="comment">//如果需要，则为对象初始化零值</span></span><br><span class="line">			<span class="keyword">if</span>（need_zero）&#123;</span><br><span class="line">				HeapWord * to_zero=（HeapWord*）result+<span class="keyword">sizeof</span>（oopDesc）/oopSize；</span><br><span class="line">				obj_size-=<span class="keyword">sizeof</span>（oopDesc）/oopSize；</span><br><span class="line">				<span class="keyword">if</span>（obj_size＞<span class="number">0</span>）&#123;</span><br><span class="line">					<span class="built_in">memset</span>（to_zero，<span class="number">0</span>，obj_size * HeapWordSize）；</span><br><span class="line">				&#125;</span><br><span class="line">            &#125;</span><br><span class="line">			<span class="comment">//根据是否启用偏向锁来设置对象头信息</span></span><br><span class="line">			<span class="keyword">if</span>（UseBiasedLocking）&#123;</span><br><span class="line">				result-＞set_mark（ik-＞prototype_header（））；</span><br><span class="line">			&#125;<span class="keyword">else</span>&#123;</span><br><span class="line">				result-＞set_mark（markOopDesc：prototype（））；</span><br><span class="line">			&#125;</span><br><span class="line">            result-＞set_klass_gap（<span class="number">0</span>）；</span><br><span class="line">			result-＞set_klass（k_entry）；</span><br><span class="line">			<span class="comment">//将对象引用入栈，继续执行下一条指令</span></span><br><span class="line">			SET_STACK_OBJECT（result，<span class="number">0</span>）；</span><br><span class="line">			UPDATE_PC_AND_TOS_AND_CONTINUE（<span class="number">3</span>，<span class="number">1</span>）；</span><br><span class="line">		&#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>对象的内存布局</p>
+<p><strong>HotSpot</strong>虚拟机中，对象在内存中分为3块区域：<strong style='color:red'>对象头(Header)、实例数据(Instance Data)、对齐填充(Padding)</strong>。</p>
+<ol>
+<li><p>对象头，对象头包括两部分信息</p>
+<ul>
+<li>对象自身的运行时数据，例如，哈希码，GC分代年龄、锁状态标志、线程持有的锁、偏向线程ID、偏向时间戳等，即<strong>Mark Word</strong>，是与对象自身定义无关的额外存储成本，为了节省空间效率，<strong>Mark Word</strong>被设计成非固定的数据结构以便在极小的空间内存内存储尽量多的信息。具体见<a target="_blank" rel="noopener" href="https://effiu.github.io/blog/2019/04/09/concurrent/chapter2/2.2_synchronized/">synchronized</a></li>
+<li>对象头的另外一部分是类型指针，即对象指向类元数据的指针。</li>
+<li>对象是数据，还会存储数组的长度，因为虚拟机可以通过普通Java对象元数据信息确定Java对象的大小，但是数组的元数据中无法确认大小</li>
+</ul>
+</li>
+<li><p>实例数据</p>
+<p>对象真正的有效信息，包括代码中定义的各种类型的字段内容（父类和子类都需要记录）。存储顺序会受Java虚拟机分配策略参数（FieldsAllocationStyle）和字段在Java源码的定义顺序影响。分配策略为<code>longs/doubles</code>、<code>ints</code>、<code>shorts/chars</code>、<code>bytes/booleans</code>、<code>oops</code>(Ordinary Object Pointer)，相同宽度的数据总被分配到一起且父类中定义的变量会在子类之前。若<strong>CompatcFields</strong>参数值为<strong>true</strong>，子类中较窄的变量也会被插入到父类变量的空隙中</p>
+</li>
+<li><p>对其填充</p>
+<p>不一定存在，没有特殊意义，起占位符的作用。由于<strong>HotSpot VM</strong>自动内存管理系统要求对象起始地址必须是8字节的整数倍，而对象头大小是8的整数倍，所以实例数据部分字段没有对齐时，需要通过对齐填充补全。</p>
+</li>
+</ol>
+</li>
+<li><p>对象的访问定位</p>
+<p>Java程序需要通过栈上的<strong>reference</strong>数据操作堆上的具体对象，<strong>reference</strong>类型在Java虚拟机规范中只规定了一个指向对象的引用，并没有定义引用如何定位、访问对重的具体位置，对象的访问方式取决于虚拟机的实现。目前主要有句柄池和直接指针两种方式</p>
+<ul>
+<li><p><strong>句柄池</strong>，Java堆中会划分出一块内存作为句柄池，<strong>reference</strong>引用中存储的就是对象的柄地址，句柄中包含了对象实例数据与类型数据各自的具体地址信息。<strong style='color:red'>优点</strong>：对象被移动后只会改变句柄中的实例数据指针，不需要改变<strong>reference</strong>引用</p>
+<p><img src="https://images.effiu.cn/blog/jvm/04.png" alt="句柄池访问对象"></p>
+</li>
+<li><p><strong>直接指针</strong>，速度更快，节省了指针定位的时间开销（Java中对象访问很频繁）。HotSpot VM是使用直接指针访问对象的。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/05.png" alt="直接指针访问对象"></p>
+</li>
+</ul>
+</li>
+</ol>
+<h6 id="3-OutOfMemoryError异常"><a href="#3-OutOfMemoryError异常" class="headerlink" title="3. OutOfMemoryError异常"></a>3. OutOfMemoryError异常</h6><p>JVM中，除了程序计数器外，虚拟机内存的其他几个运行区域都有发生<code>OutOfMemoryError</code>。</p>
+<ol>
+<li><p>Java堆溢出</p>
+<p>Java堆用于存储对象实例，只要不断创建对象，且保证对象可达就可以避免<strong>GC</strong>回收，以此当对象占用内存空间达到容量限制后就会产生<strong>OOM</strong>。</p>
+<p><code>-XX:+HeapDumpOnOutOfMemoryError</code>可以让虚拟机在出现内存异常时<strong>Dump</strong>出当前内存堆转储快照便于分析。<code> -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=path</code>，path即dump路径。</p>
+<p>解决堆内存异常，一般是通过内存映像分析工具对<strong>Dump</strong>出来的堆转储快照进行分析，确认内存中的对象是否必要，确认是内存溢出(<strong>OOM</strong>)还是内存泄露(Memory Leak)。</p>
+<ul>
+<li>若是内存泄露可以进一步使用工具查看泄露对象到<strong>GC Roots</strong>的引用链，确认泄露对象的类型信息以及<strong>GC Roots</strong>引用链的信息，便于定位出现问题的代码。</li>
+<li>若确认对象不存在泄露，则需要检查虚拟机堆参数(-Xmx、-Xms)是否可以调大，确认是否存在某些对象生命周期是否过长，尝试减少程序运行期的内存消耗。</li>
+</ul>
+</li>
+<li><p>虚拟机栈和本地方法栈溢出</p>
+<p>在HotSpot虚拟机中没有区分虚拟机栈和本地方法栈。<code>-Xoss</code>(设置本地方法栈大小)实际是无效的，栈容量只由<code>-Xss</code>参数设置。</p>
+<p>当栈空间不足时，可能会是由于<strong>内存太小</strong>或者是<strong>已使用栈空间太大</strong>，大部分情况是抛出<code>StackOverflowError</code>。一般来说多线程情况下，单个线程分配的栈空间越大，可以建立的线程数量越少，建立线程时越容易把剩下的内存消耗，所以如果是建立过多线程会导致内存溢出。这种情况若不能减少线程数就只能减少最大堆和最大栈容量换取更多的线程。</p>
+</li>
+<li><p>方法区和运行时常量池溢出</p>
+<p>运行时常量池是方法区的一部分。</p>
+<p>方法区用于存放<strong>Class</strong>的相关信息，如类名、访问修饰符、常量池、字段描述、方法描述等等，所以一般运行时产生大量的类会导致方法去溢出。例如Spring中，对类进行代理时，代理的类越多，就越需要越大的方法区保证动态生成的<strong>Class</strong>可以载入内存。</p>
+<p>方法区溢出也是比较常见的内存溢出异常，方法区的回收比较苛刻。以下场景需要注意方法区内存溢出：</p>
+<ul>
+<li>Spring、Mybatis等对字节码的代理增强</li>
+<li>大量<strong>JSP</strong>或者动态产生JSP文件的应用</li>
+<li>基于<strong>OSGI</strong>的应用</li>
+</ul>
+</li>
+<li><p>本机直接内存溢出</p>
+<p><code>DirectMemory</code>容量可以通过<code>-XX:MaxDirectMemorySize</code>指定，默认与Java堆最大值(-Xmx)一样。<code>DirectMemory</code>导致的内存溢出，在Heap Dump文件中不会看到明显异常，所以当出现内存溢出时，Dump文件很小，且有使用NIO则有可能是直接内存溢出</p>
+</li>
+</ol>
+<blockquote>
+<p>总结：Java垃圾收集机制，但是内存溢出仍是常见现象。</p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/02/jvm/1_into_java/" rel="prev" title="走进Java">
+      <i class="fa fa-chevron-left"></i> 走进Java
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/10/jvm/3_gc_memory_allocation/" rel="next" title="垃圾收集器与内存分配策略">
+      垃圾收集器与内存分配策略 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

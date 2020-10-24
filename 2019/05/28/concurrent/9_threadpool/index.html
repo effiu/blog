@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Java中的线程池是运用场景最多的并发框架，几乎所有需要异步或并发执行任务的程序都可以使用线程池。合理使用线程池会有以下3个好处:   降低资源消耗，通过重复利用已创建的线程降低线程创建和销毁造成的孙昊 提高相应速度，任务不需要创建线程就可以立即执行 提高线程可管理性，线程是稀缺资源，无限制创建不仅会消耗系统资源，还会降低系统稳定性，使用线程池进行统一分配、调优和监控。  1. 线程池的实现原理">
+<meta property="og:type" content="article">
+<meta property="og:title" content="线程池">
+<meta property="og:url" content="https://www.effiu.cn/2019/05/28/concurrent/9_threadpool/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Java中的线程池是运用场景最多的并发框架，几乎所有需要异步或并发执行任务的程序都可以使用线程池。合理使用线程池会有以下3个好处:   降低资源消耗，通过重复利用已创建的线程降低线程创建和销毁造成的孙昊 提高相应速度，任务不需要创建线程就可以立即执行 提高线程可管理性，线程是稀缺资源，无限制创建不仅会消耗系统资源，还会降低系统稳定性，使用线程池进行统一分配、调优和监控。  1. 线程池的实现原理">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/59.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/60.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/61.jpg">
+<meta property="article:published_time" content="2019-05-27T16:15:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/59.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/05/28/concurrent/9_threadpool/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>线程池 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86"><span class="nav-number">1.</span> <span class="nav-text">1. 线程池的实现原理</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E4%BD%BF%E7%94%A8"><span class="nav-number">2.</span> <span class="nav-text">2. 线程池的使用</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E6%8F%90%E4%BA%A4%E4%BB%BB%E5%8A%A1"><span class="nav-number">3.</span> <span class="nav-text">3. 提交任务</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-%E5%85%B3%E9%97%AD%E7%BA%BF%E7%A8%8B%E6%B1%A0"><span class="nav-number">4.</span> <span class="nav-text">4. 关闭线程池</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#5-%E5%90%88%E7%90%86%E9%85%8D%E7%BD%AE%E7%BA%BF%E7%A8%8B%E6%B1%A0"><span class="nav-number">5.</span> <span class="nav-text">5. 合理配置线程池</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#6-%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E7%9B%91%E6%8E%A7"><span class="nav-number">6.</span> <span class="nav-text">6. 线程池的监控</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/05/28/concurrent/9_threadpool/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          线程池
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-05-28 00:15 00:15:00" itemprop="dateCreated datePublished" datetime="2019-05-28T00:15:00+08:00">2019-05-28 00:15</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/05/28/concurrent/9_threadpool/" class="post-meta-item leancloud_visitors" data-flag-title="线程池" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/05/28/concurrent/9_threadpool/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/05/28/concurrent/9_threadpool/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p><strong style='color:red'>Java中的线程池是运用场景最多的并发框架</strong>，几乎所有需要异步或并发执行任务的程序都可以使用线程池。合理使用线程池会有以下3个好处:</p>
+</blockquote>
+<ul>
+<li>降低资源消耗，通过重复利用已创建的线程降低线程创建和销毁造成的孙昊</li>
+<li>提高相应速度，任务不需要创建线程就可以立即执行</li>
+<li>提高线程可管理性，线程是稀缺资源，无限制创建不仅会消耗系统资源，还会降低系统稳定性，使用线程池进行统一分配、调优和监控。</li>
+</ul>
+<h6 id="1-线程池的实现原理"><a href="#1-线程池的实现原理" class="headerlink" title="1. 线程池的实现原理"></a>1. 线程池的实现原理</h6><blockquote>
+<p>从下图可得出以下结论：</p>
+</blockquote>
+<ul>
+<li>线程池判断核心线程池里的线程是否都在执行任务</li>
+<li>线程池判断工作队列是否已满</li>
+<li>线程池判断线程池的线程是否都处于工作状态</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/59.jpg" alt="处理流程"></p>
+<blockquote>
+<p>线程池<code>ThreadPoolExecutor</code>执行分为以下4种情况：</p>
+</blockquote>
+<ul>
+<li>若当前运行线程少于<code>corePoolSize</code>，则创建新线程执行任务(需要获取全局锁)</li>
+<li>若运行线程等于或多余<code>corePoolSize</code>，则将任务加入<code>BlockQueue</code></li>
+<li>若<code>BlockQueue</code>队列已满，则创建新的线程处理任务(需要获取全局锁)</li>
+<li>若新创建线程会使当前运行线程超出<code>maximumPoolSize</code>，任务将被拒绝，调用<code>RejectExecutionHandler.rejectedExecution()</code>方法</li>
+</ul>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/60.jpg" alt="处理流程"></p>
+<blockquote>
+<p>上述步骤，所有创建线程操作需要全局锁(是一个瓶颈)。步骤2不需要全局锁</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">execute</span><span class="params">(Runnable command)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (command == <span class="keyword">null</span>)</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> NullPointerException();</span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * Proceed in 3 steps:</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * 1. If fewer than corePoolSize threads are running, try to</span></span><br><span class="line"><span class="comment">     * start a new thread with the given command as its first</span></span><br><span class="line"><span class="comment">     * task.  The call to addWorker atomically checks runState and</span></span><br><span class="line"><span class="comment">     * workerCount, and so prevents false alarms that would add</span></span><br><span class="line"><span class="comment">     * threads when it shouldn&#x27;t, by returning false.</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * 2. If a task can be successfully queued, then we still need</span></span><br><span class="line"><span class="comment">     * to double-check whether we should have added a thread</span></span><br><span class="line"><span class="comment">     * (because existing ones died since last checking) or that</span></span><br><span class="line"><span class="comment">     * the pool shut down since entry into this method. So we</span></span><br><span class="line"><span class="comment">     * recheck state and if necessary roll back the enqueuing if</span></span><br><span class="line"><span class="comment">     * stopped, or start a new thread if there are none.</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * 3. If we cannot queue task, then we try to add a new</span></span><br><span class="line"><span class="comment">     * thread.  If it fails, we know we are shut down or saturated</span></span><br><span class="line"><span class="comment">     * and so reject the task.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">int</span> c = ctl.get();</span><br><span class="line">    <span class="keyword">if</span> (workerCountOf(c) &lt; corePoolSize) &#123;</span><br><span class="line">        <span class="keyword">if</span> (addWorker(command, <span class="keyword">true</span>))</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        c = ctl.get();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (isRunning(c) &amp;&amp; workQueue.offer(command)) &#123;</span><br><span class="line">        <span class="keyword">int</span> recheck = ctl.get();</span><br><span class="line">        <span class="keyword">if</span> (! isRunning(recheck) &amp;&amp; remove(command))</span><br><span class="line">            reject(command);</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (workerCountOf(recheck) == <span class="number">0</span>)</span><br><span class="line">            addWorker(<span class="keyword">null</span>, <span class="keyword">false</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (!addWorker(command, <span class="keyword">false</span>))</span><br><span class="line">        reject(command);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>ThreadPoolExecutor</code>中线程执行示意图如下：</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/61.jpg" alt="线程执行示意图"></p>
+<blockquote>
+<p>线程池中线程执行任务分两种情况：</p>
+</blockquote>
+<ul>
+<li><code>execute()</code>方法中创建一个线程时，会让这个线程执行当前任务</li>
+<li>线程执行完任务后，会反复从<code>BlockingQueue</code>中获取任务执行</li>
+</ul>
+<h6 id="2-线程池的使用"><a href="#2-线程池的使用" class="headerlink" title="2. 线程池的使用"></a>2. 线程池的使用</h6><blockquote>
+<p><code>new ThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue&lt;Runnable&gt; runnableTaskQueue, RejectedExecutionHandler handler)</code>，需要以下几个参数:</p>
+</blockquote>
+<ul>
+<li><code>corePoolSize</code>: 线程池基本大小，提交任务后，线程池会创建线程执行任务，即使其他控线基本线程能够执行新任务时也会创建线程，直到任务数大于线程池基本大小时就不再创建。<code>prestartAllCoreThreads()</code>会提前创建并启动所有基本线程</li>
+<li><code>BlockingQueue&lt;Runnable&gt;</code>: 任务队列。用于保存等待执行任务的阻塞队列，可选队列类型如下：<ul>
+<li><code>ArrayBlockingQueue</code>: 基于数组结构的有界阻塞队列，FIFO原则</li>
+<li><code>LinkedBlockingQueue</code>: 基于链表结构的有几节阻塞队列，FIFO原则，吞吐量高于<code>ArrayBlockingQueue</code>。<code>Executors.newFixedThreadPool()</code>使用了此队列。</li>
+<li><code>SynchronousQueue</code>: 不存储元素的阻塞队列。吞吐量高于<code>LinkedBlockingQueue</code>，<code>Executors.newCacheedThreadPoool()</code>使用了此队列。</li>
+<li><code>PriorityBlockingQueue</code>: 具有优先级的无界阻塞队列</li>
+</ul>
+</li>
+<li><code>maximumPoolSize</code>: 线程池最大数量。线程池允许的最大线程数。只有当队列已满，且已线程数小于最大线程数，线程池才会创建新的线程执行任务。注意：无界队列，队列不会满</li>
+<li><code>ThreadFactory</code>: 用于设置创建线程的工厂，可以通过线程工厂给每个创建出来的线程设置更有意义的名字</li>
+<li><code>RejectedExecutionHandler</code>：饱和策略。当队列和线程池已满说明线程池处于饱和状态，此时必须采取一种策略处理提交的任务。有以下4种策略：<ul>
+<li><code>AbortPolicy</code>: 抛出异常，默认策略</li>
+<li><code>CallerRunsPolicy</code>: 只用调用者所在线程来运行任务</li>
+<li><code>DiscardOldestPolicy</code>: 丢弃队列中最近的一个任务并执行当前任务</li>
+<li><code>DiscardPolicy</code>: 不处理，直接丢弃</li>
+<li>还可以自定义<code>RejectedExecutionhandler</code>接口</li>
+</ul>
+</li>
+</ul>
+<h6 id="3-提交任务"><a href="#3-提交任务" class="headerlink" title="3. 提交任务"></a>3. 提交任务</h6><blockquote>
+<p>有两种提交任务的方法，<code>execute()</code>和<code>submit()</code></p>
+</blockquote>
+<ul>
+<li><code>execute()</code>: 是用于提交不需要返回值的任务。</li>
+<li><code>submit()</code>: 用于提交需要返回值的任务。会返回一个<code>future</code>类型的对象，可以使用此对象判断任务是否执行成功，可以使用<code>future.get()</code>获取返回值，会一直阻塞到任务执行完成，<code>get(long timeout, TimeUnit unit)</code>方法会阻塞到指定超时时间。</li>
+</ul>
+<h6 id="4-关闭线程池"><a href="#4-关闭线程池" class="headerlink" title="4. 关闭线程池"></a>4. 关闭线程池</h6><blockquote>
+<p><code>shutdown()</code>和<code>shudownNow()</code>关闭线程池。会遍历线程池中的工作线程，然后逐个调用<code>interrupt()</code>方法中断线程，所以无法响应中断的线程可能无法终止。<strong style='color:red'>区别</strong>：<code>shutdownNow()</code>会先将线程池状态设置为<strong>STOP</strong>，然后尝试停止所有正在执行或暂停任务的线程，并返回等待执行任务的列表。<code>shutdow()</code>会将线程池状态设置为<code>SHUTDOWN</code>，中断没有正在执行任务的线程。</p>
+<p>只要调用了任何一个方法<code>isShutdown()</code>就会返回true</p>
+<p>只要线程池全部关闭后，调用<code>isTerminated</code>才会返回true</p>
+</blockquote>
+<h6 id="5-合理配置线程池"><a href="#5-合理配置线程池" class="headerlink" title="5. 合理配置线程池"></a>5. 合理配置线程池</h6><blockquote>
+<p>合理使用 线程池，就需要分析任务特性</p>
+</blockquote>
+<ul>
+<li>任务的性质，CPU密集任务、IO密集型任务和混合型任务</li>
+<li>任务的优先级，使用优先级队列</li>
+<li>任务的执行时间，根据执行时间交给不同的线程池</li>
+<li>任务的依赖性，是否依赖其他资源，可以设置较长等待时间</li>
+</ul>
+<blockquote>
+<p>CPU密集型，应配置尽量小 的线程，例如CPU+1。IO密集型应配置尽量多的线程2CPU。混合型任务则可以拆分任务，<code>Runtime.getRunTime().availableProcessors()</code>获取当前设备的CPU个数。</p>
+<p><strong style='color:red'>使用有界队列</strong>。防止线程池不合理导致队列变大。</p>
+</blockquote>
+<h6 id="6-线程池的监控"><a href="#6-线程池的监控" class="headerlink" title="6. 线程池的监控"></a>6. 线程池的监控</h6><blockquote>
+<p>系统中大量使用线程池，则有必要对线程池进行监控，便于出现问题时快速定位问题。</p>
+<p>可以通过线程池提供的参数进行监控，具有以下属性:</p>
+</blockquote>
+<ul>
+<li><code>taskCount</code>: 线程池需要执行的任务数量</li>
+<li><code>completedTaskCount</code>: 线程池已经完成的任务数量，小于等于<code>taskCount</code>。</li>
+<li><code>largestPoolSize</code>: 曾经创建过的最大线程池数量。</li>
+<li><code>getPoolSize</code>:  线程池内的线程数量，线程并不会自动销毁。</li>
+<li><code>getActiveCount</code>: 获取活动的线程池数</li>
+</ul>
+<blockquote>
+<p>重写线程池的<code>beforeExecute()</code>、<code>afterExexute()</code>、<code>terminalted()</code>拓展线程池的监控。</p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/27/concurrent/8_concurrent_tools/" rel="prev" title="并发工具类">
+      <i class="fa fa-chevron-left"></i> 并发工具类
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/30/concurrent/10_executor/" rel="next" title="Executor框架">
+      Executor框架 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

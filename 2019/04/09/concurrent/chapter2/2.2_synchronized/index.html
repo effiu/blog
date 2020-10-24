@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Java SE 1.6对synchronized进行了各种优化，本文介绍了Java SE 1.6中为了减少获得锁和释放锁带来的性能消耗而引入的偏向锁和轻量级锁，以及锁的存储结构和升级过程。  1. synchronized 发音 [sɪŋkrənaɪzd] synchronized实现同步的基础：Java中每个对象都可以作为锁，具体表现为3种形式：   对于普通同步方法，锁是当前实例对象。 对于">
+<meta property="og:type" content="article">
+<meta property="og:title" content="synchronized">
+<meta property="og:url" content="https://www.effiu.cn/2019/04/09/concurrent/chapter2/2.2_synchronized/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Java SE 1.6对synchronized进行了各种优化，本文介绍了Java SE 1.6中为了减少获得锁和释放锁带来的性能消耗而引入的偏向锁和轻量级锁，以及锁的存储结构和升级过程。  1. synchronized 发音 [sɪŋkrənaɪzd] synchronized实现同步的基础：Java中每个对象都可以作为锁，具体表现为3种形式：   对于普通同步方法，锁是当前实例对象。 对于">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/01.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/02.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/04.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/03.jpg">
+<meta property="article:published_time" content="2019-04-09T03:14:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/01.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/04/09/concurrent/chapter2/2.2_synchronized/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>synchronized | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-synchronized-%E5%8F%91%E9%9F%B3-s%C9%AA%C5%8Bkr%C9%99na%C9%AAzd"><span class="nav-number">1.</span> <span class="nav-text">1. synchronized 发音 [sɪŋkrənaɪzd]</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-Java%E5%AF%B9%E8%B1%A1%E5%A4%B4"><span class="nav-number">2.</span> <span class="nav-text">2. Java对象头</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E9%94%81%E7%9A%84%E5%8D%87%E7%BA%A7%E4%B8%8E%E5%AF%B9%E6%AF%94"><span class="nav-number">3.</span> <span class="nav-text">3. 锁的升级与对比</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/04/09/concurrent/chapter2/2.2_synchronized/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          synchronized
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-04-09 11:14 11:14:00" itemprop="dateCreated datePublished" datetime="2019-04-09T11:14:00+08:00">2019-04-09 11:14</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/04/09/concurrent/chapter2/2.2_synchronized/" class="post-meta-item leancloud_visitors" data-flag-title="synchronized" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/04/09/concurrent/chapter2/2.2_synchronized/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/04/09/concurrent/chapter2/2.2_synchronized/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <blockquote>
+<p>Java SE 1.6对<code>synchronized</code>进行了各种优化，本文介绍了Java SE 1.6中为了减少获得锁和释放锁带来的性能消耗而引入的偏向锁和轻量级锁，以及锁的存储结构和升级过程。</p>
+</blockquote>
+<h6 id="1-synchronized-发音-sɪŋkrənaɪzd"><a href="#1-synchronized-发音-sɪŋkrənaɪzd" class="headerlink" title="1. synchronized 发音 [sɪŋkrənaɪzd]"></a>1. synchronized 发音 [sɪŋkrənaɪzd]</h6><blockquote>
+<p><code>synchronized</code>实现同步的基础：Java中每个对象都可以作为锁，具体表现为3种形式：</p>
+</blockquote>
+<ul>
+<li>对于普通同步方法，锁是当前实例对象。</li>
+<li>对于静态同步方法，锁是当前<strong>Class</strong>对象</li>
+<li>对于同步方法块，锁是<code>Synchronized</code>括号里配置的对象</li>
+</ul>
+<blockquote>
+<p>当一个线程试图访问同步代码块时，必须先得到锁，退出或者抛出异常必须释放锁。</p>
+<p><code>Synchronized</code>在JVM里的实现原理，JVM基于进入和退出<strong>Monitor</strong>对象来实现方法同步和代码块同步，但是实现细节不一样。代码块同步是使用<code>monitorenter</code>和<code>monitorexit</code>指令实现，而方法的同步是使用另外一种方式实现的。</p>
+<p><code>monitorenter</code>指令是在编译后插入到同步代码块的开始位置，<code>monitorexit</code>是插入到方法结束处和异常处，JVM要保证每个<code>monitorenter</code>必须有对应的<code>monitorexit</code>与之配对。任何对象都有一个<code>monitor</code>与之关联，当一个<code>monitor</code>被持有后，它将处于锁定状态。线程执行到<code>monitorenter</code>时，会尝试获取对象所对应的<code>monitor</code>所有权，即尝试获得对象锁。</p>
+</blockquote>
+<h6 id="2-Java对象头"><a href="#2-Java对象头" class="headerlink" title="2. Java对象头"></a>2. Java对象头</h6><blockquote>
+<p><code>synchronized</code>用的锁是存在Java对象头里的。如果对象是数组类型，则虚拟机用3个字宽(Word)存储对象头，若非数组类型，则用2个字宽存储对象头。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">长度</th>
+<th>内容</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">32/64bit</td>
+<td>Mark Word</td>
+<td>存储对象的hashCode、分代年龄和锁标记位</td>
+</tr>
+<tr>
+<td align="center">32/64bit</td>
+<td>Class Metadata Address</td>
+<td>存储到对象的类型数据的指针</td>
+</tr>
+<tr>
+<td align="center">32/64bit</td>
+<td>Array length</td>
+<td>数组的长度(如果当前对象是数组)</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>Java对象头里的<strong>Mark Word</strong>的存储结构</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="center">锁状态</th>
+<th align="center">25bit</th>
+<th align="center">4bit</th>
+<th align="center">1bit是否偏向锁</th>
+<th align="center">2bit锁标志位</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">无锁状态</td>
+<td align="center">对象的hashCode</td>
+<td align="center">对象分代年龄</td>
+<td align="center">0</td>
+<td align="center">01</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>运行期间<strong>Mark Word</strong>里存储的数据会随着标志位的变化而变化，如下图:</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/01.jpg" alt="Mark Word变化"></p>
+<blockquote>
+<p>64位虚拟机下，Mark Word是64位大小，存储结构如下:</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/02.jpg" alt="Mark Word存储结构"></p>
+<h6 id="3-锁的升级与对比"><a href="#3-锁的升级与对比" class="headerlink" title="3. 锁的升级与对比"></a>3. 锁的升级与对比</h6><blockquote>
+<p>Java SE 1.6中为了减少获得锁和释放锁带来的性能消耗，引入的“偏向锁”和“轻量级锁”，锁共有四种状态，级别从高到低依次是<strong>无锁状态</strong>、<strong>偏向锁状态</strong>、<strong>轻量级锁</strong>、<strong>重量级锁</strong>，会随着竞争情况逐渐升级。锁可以升级但不能降级，这种锁升级却不能降级的策略，目的是为了提高获得锁和释放锁的效率。</p>
+</blockquote>
+<ol>
+<li><p>偏向锁</p>
+<ul>
+<li><input disabled="" type="checkbox"> CAS 算法原理</li>
+</ul>
+<blockquote>
+<p>大多数情况下，锁不仅不存在多线程竞争，而且总是由同一线程多次获得，为了让线程获得锁的代价更低而引入了偏向锁。当一个线程访问同步块并获取锁时，会在对象头和栈帧中记录并存储偏向锁的线程ID，以后该线程在进入和退出同步块时不需要进行CAS操作来加锁和解锁，只需要简单验证下对象头的Mark Word里是否存储着指向当前线程的偏向锁，验证成功，则说明已经获得了锁；验证失败，则需要在验证下Mark Word 中偏向锁的标识是否设置成1(表示当前是偏向锁)；若没有则使用CAS竞争锁；若设置了，则使用CAS将对象头的偏向锁指向当前线程</p>
+</blockquote>
+<ol>
+<li><p>偏向锁的撤销</p>
+<blockquote>
+<p>偏向锁使用了一种等到竞争出现才会释放所的机制。偏向锁的撤销，需要等待全局安全点（在这个时间点上没有正在执行的字节码）。它会首先暂停拥有偏向锁的线程，然后检查持有偏向锁的线程是否活着，若线程不处于活动状态，则将对象头设置成无锁状态；若线程仍活着，则拥有偏向锁的栈会被执行，遍历偏向对象的锁记录，栈中的锁记录和对象头的Mark Word要么重新偏向于其他线程，要么恢复到无锁状态或者标记对象不适合作为偏向锁，最后唤醒暂停的线程</p>
+</blockquote>
+</li>
+</ol>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/04.jpg" alt="偏向锁的获得和插销流程"></p>
+<ol start="2">
+<li><p>关闭偏向锁</p>
+<blockquote>
+<p>如果偏向锁在Java 6和Java 7是默认启用的，默认是在程序启动几秒钟后才能激活，可以使用JVM参数关闭延迟</p>
+</blockquote>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">-XX:biasedLockingStartupDelay=0</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>若确定应用程序所有锁通常处于竞争状态，通过JVM参数关闭偏向锁，这样程序会默认进入轻量级锁状态</p>
+</blockquote>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">-XX:UseBiasedLocking=false</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+</li>
+<li><p>轻量级锁</p>
+<ol>
+<li><p>轻量级锁加锁</p>
+<blockquote>
+<p>线程执行同步块之前，JVM会先在当前线程的栈帧中创建用于存储锁记录的空间，并将对象头中的<strong>Mark Word</strong>复制到锁记录中，然后线程尝试使用CAS将对象头中的**Mark Word(Displaced Mark Word)**替换为指向锁记录的指针，成功则说明线程获得锁；失败表示其他线程竞争锁，当前线程便尝试使用自旋获取锁</p>
+</blockquote>
+</li>
+<li><p>轻量级锁解锁</p>
+<blockquote>
+<p>轻量级锁解锁时，会使用原子的CAS操作将<strong>Displaced Mark Word</strong>替换回到对象头，如果成功则表示没有竞争发生，若失败锁就会膨胀成重量级锁。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/03.jpg" alt="轻量级锁及膨胀流程图"></p>
+<blockquote>
+<p>自旋会消耗CPU，所以为了避免无用的自旋，一旦锁升级成重量级锁，就不会恢复成轻量级锁，锁在这个状态下，其他线程试图获取锁时，会被阻塞住，当持有锁的线程释放所之后会唤醒这些线程，被唤醒的线程进入到新一轮竞争中</p>
+</blockquote>
+</li>
+<li><p>锁的优缺点对比</p>
+</li>
+</ol>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>锁</th>
+<th>优点</th>
+<th>缺点</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>偏向锁</td>
+<td>加锁和解锁不需要额外的消耗，和执行非同步方法相比仅存在纳秒级的差距</td>
+<td>如果线程间存在所得竞争，会带来额外的锁撤销的消耗</td>
+<td>适用于只有一个线程访问同步块的场景</td>
+</tr>
+<tr>
+<td>轻量级锁</td>
+<td>竞争的线程不会阻塞，提高了程序的相应速度</td>
+<td>如果始终得到不锁竞争的线程，使用自旋会消耗CPU追求响应时间</td>
+<td>同步块执行速度非常快</td>
+</tr>
+<tr>
+<td>重量级锁</td>
+<td>线程竞争不使用自旋，不会消耗CPU</td>
+<td>线程阻塞，响应时间缓慢</td>
+<td>追求吞吐量，同步块执行速度较长</td>
+</tr>
+</tbody></table>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/04/07/concurrent/chapter2/2.1_volatile/" rel="prev" title="volatile">
+      <i class="fa fa-chevron-left"></i> volatile
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/04/13/concurrent/chapter2/2.3_atomic/" rel="next" title="原子操作的实现原理">
+      原子操作的实现原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

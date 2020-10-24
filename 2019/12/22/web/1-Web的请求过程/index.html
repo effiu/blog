@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Web2.0使得互联网的网络架构从C&#x2F;S架构转为更加方便、快捷的B&#x2F;S架构,B&#x2F;S架构大大简化了用户网络应用的难度。B&#x2F;S架构带来了两方面的好处：  客户端使用统一的浏览器(Browser)。由于浏览器具有统一性，不需要特殊的配置和网络连接，有效地屏蔽了不同服务器提供商提供给用户使用服务的差异性。浏览器的交互特性使得用户使用它非常方便，且用户行为的可继承性非常强，即只要用户学会了上网，那么所有基于">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java Web 请求过程">
+<meta property="og:url" content="https://www.effiu.cn/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Web2.0使得互联网的网络架构从C&#x2F;S架构转为更加方便、快捷的B&#x2F;S架构,B&#x2F;S架构大大简化了用户网络应用的难度。B&#x2F;S架构带来了两方面的好处：  客户端使用统一的浏览器(Browser)。由于浏览器具有统一性，不需要特殊的配置和网络连接，有效地屏蔽了不同服务器提供商提供给用户使用服务的差异性。浏览器的交互特性使得用户使用它非常方便，且用户行为的可继承性非常强，即只要用户学会了上网，那么所有基于">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/01.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/02.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/03.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/04.png">
+<meta property="article:published_time" content="2019-12-21T16:36:00.000Z">
+<meta property="article:modified_time" content="2020-03-29T08:09:02.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/01.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Java Web 请求过程 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-B-S%E7%BD%91%E7%BB%9C%E6%9E%B6%E6%9E%84%E6%A6%82%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">1. B&#x2F;S网络架构概述</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%A6%82%E4%BD%95%E5%8F%91%E8%B5%B7%E4%B8%80%E4%B8%AAHTTP%E8%AF%B7%E6%B1%82"><span class="nav-number">2.</span> <span class="nav-text">2. 如何发起一个HTTP请求</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-HTTP%E8%A7%A3%E6%9E%90"><span class="nav-number">3.</span> <span class="nav-text">3. HTTP解析</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-Cache-Control-Pragma"><span class="nav-number">3.0.1.</span> <span class="nav-text">1. Cache-Control&#x2F;Pragma</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-Expires"><span class="nav-number">3.0.2.</span> <span class="nav-text">2. Expires</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-Last-Modified-Etag"><span class="nav-number">3.0.3.</span> <span class="nav-text">3. Last-Modified&#x2F;Etag</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-DNS%E5%9F%9F%E5%90%8D%E8%A7%A3%E6%9E%90"><span class="nav-number">4.</span> <span class="nav-text">4. DNS域名解析</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-DNS%E5%9F%9F%E5%90%8D%E8%A7%A3%E6%9E%90%E7%9A%84%E8%BF%87%E7%A8%8B"><span class="nav-number">4.0.1.</span> <span class="nav-text">1. DNS域名解析的过程</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E8%B7%9F%E8%B8%AA%E5%9F%9F%E5%90%8D%E8%A7%A3%E6%9E%90%E8%BF%87%E7%A8%8B"><span class="nav-number">4.0.2.</span> <span class="nav-text">2. 跟踪域名解析过程</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E6%B8%85%E9%99%A4%E7%BC%93%E5%AD%98%E7%9A%84%E5%9F%9F%E5%90%8D"><span class="nav-number">4.0.3.</span> <span class="nav-text">3. 清除缓存的域名</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-%E5%87%A0%E7%A7%8D%E5%9F%9F%E5%90%8D%E8%A7%A3%E6%9E%90%E6%96%B9%E5%BC%8F"><span class="nav-number">4.0.4.</span> <span class="nav-text">4. 几种域名解析方式</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-CDN%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">5.</span> <span class="nav-text">5. CDN工作机制</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-CDN%E6%9E%B6%E6%9E%84"><span class="nav-number">5.0.1.</span> <span class="nav-text">1. CDN架构</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1"><span class="nav-number">5.0.2.</span> <span class="nav-text">2. 负载均衡</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-CDN%E5%8A%A8%E6%80%81%E5%8A%A0%E9%80%9F"><span class="nav-number">5.0.3.</span> <span class="nav-text">3. CDN动态加速</span></a></li></ol></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java Web 请求过程
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-12-22 00:36 00:36:00" itemprop="dateCreated datePublished" datetime="2019-12-22T00:36:00+08:00">2019-12-22 00:36</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-03-29 16:09 16:09:02" itemprop="dateModified" datetime="2020-03-29T16:09:02+08:00">2020-03-29 16:09</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/" class="post-meta-item leancloud_visitors" data-flag-title="Java Web 请求过程" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/12/22/web/1-Web%E7%9A%84%E8%AF%B7%E6%B1%82%E8%BF%87%E7%A8%8B/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Web2.0使得互联网的网络架构从C/S架构转为更加方便、快捷的B/S架构,B/S架构大大简化了用户网络应用的难度。B/S架构带来了两方面的好处：</p>
+<ul>
+<li>客户端使用统一的浏览器(Browser)。由于浏览器具有统一性，不需要特殊的配置和网络连接，有效地屏蔽了不同服务器提供商提供给用户使用服务的差异性。浏览器的交互特性使得用户使用它非常方便，且用户行为的可继承性非常强，即只要用户学会了上网，那么所有基于浏览器的操作界面都大同小异，所以相当于具有了使用经验。</li>
+<li>服务端(Server)基于统一的HTTP。与传统的C/S架构使用自定义的应用层协议不同，B/S架构使用的是统一的HTTP。使用统一的HTTP为服务提供商简化了开发模式，节省了开发成本。基于HTTP的服务器也有很多，Apache、IIS、Nginx、Tomcat、JBoss等，也使得服务开发者只需要关注服务提供商的应用逻辑。</li>
+</ul>
+<p>B/S网络架构不仅降低了普通用户的使用难度，还为互联网参与者、服务使用者和服务开发者降低了学习成本。但是作为互联网的开发者，我们要清楚从B/S架构的流程(用户在浏览器单击链接到服务器返回结果)，在这个过程中发生了什么？</p>
+<a id="more"></a>
+
+<h3 id="1-B-S网络架构概述"><a href="#1-B-S网络架构概述" class="headerlink" title="1. B/S网络架构概述"></a>1. B/S网络架构概述</h3><p>B/S网络架构从前端到后端都得到了简化，基于统一的HTTP协议来交互数据，与传统C/S互联网应用程序采用长连接的交互方式不同，HTTP采用无状态的短链接的通信方式，一次就完成了数据交互，其通常也对应一个业务逻辑，然后连接就会断开(request/response)。HTTP协议既可以满足海量用户的访问请求，还保持了快速响应。</p>
+<p>当用户在浏览器输入URL时：</p>
+<ul>
+<li>请求DNS把这个域名解析成对应的IP地址，</li>
+<li>根据这个IP地址在互联网上找到对应的服务器并发送请求(request)，</li>
+<li>服务器返回默认的数据给访问的用户。</li>
+</ul>
+<p>上述每一步都可以拓展得非常复杂。例如：服务器可能有多台，需要负载均衡等等。无论网络请求过程多么复杂，始终有一些不变的原则需要遵守：</p>
+<ul>
+<li>互联网所有资源都用一个URL(Uniform Resource Locator, 统一资源定位符)表示。URL是互联网架构的精髓。</li>
+<li>基于HTTP与服务端交互。无论访问任何资源，文本数据、流媒体等等，都必须按照HTTP协议来完成。</li>
+<li>数据展示在浏览器中完成。</li>
+</ul>
+<h3 id="2-如何发起一个HTTP请求"><a href="#2-如何发起一个HTTP请求" class="headerlink" title="2. 如何发起一个HTTP请求"></a>2. 如何发起一个HTTP请求</h3><p>发起一个HTTP请求只需要我们在浏览器中输入一个合法URL就可以。那么不借助浏览器的方式是什么？即需要我们自己组装一个符合HTTP请求的数据包，二是有哪些可以发起HTTP请求的方式？</p>
+<p>发起HTTP请求与发起Socket连接区别不大，只需要<code>outputStream.write</code>写入的二进制字节符合HTTP要求。在浏览器中输入URL后，是需要浏览器根据地址栏中输入的域名DNS解析成IP地址后，再根据这个IP地址和默认的80端口与IP所属服务器建立Socket连接，然后浏览器根据URL的其他信息组装成一个符合HTTP的请求头，通过<code>outputStream.write</code>发送到目标服务器，等待服务器通<code>inputStream.read</code>返回数据，然后断开连接。</p>
+<p>发起HTTP请求的本质就是建立Socket连接，所以可以使用Java原声的<code>Socket</code>完成，还可以使用开源的HTTP工具包完成。还可以使用linux中的<code>curl</code>命令。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 使用Socket发送HTTP请求</li>
+</ul>
+<h3 id="3-HTTP解析"><a href="#3-HTTP解析" class="headerlink" title="3. HTTP解析"></a>3. HTTP解析</h3><p>理解HTTP，最重要的是熟悉HTTP中的HTTP header, HTTP header控制着用户浏览器的渲染行为和服务器的执行逻辑。常见的HTTP请求头、响应头以及状态吗如下：</p>
+<p>HTTP请求头：</p>
+<table>
+<thead>
+<tr>
+<th align="center">请求头</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center"><code>Accept-Charset</code></td>
+<td>用于指定用户接受的字符集</td>
+</tr>
+<tr>
+<td align="center"><code>Accept-Encoding</code></td>
+<td>用于指定用户接受的内容编码，例如<code>Accept-Encoding:gzip.deflate</code></td>
+</tr>
+<tr>
+<td align="center"><code>Accept-Language</code></td>
+<td>用于指定一种自然语言，如<code>Accept-Language:zh-cn</code></td>
+</tr>
+<tr>
+<td align="center"><code>Host</code></td>
+<td>用于指定被请求资源的Internet主机和端口号，如Host:<a href="http://www.effiu.cn/">www.effiu.cn</a></td>
+</tr>
+<tr>
+<td align="center"><code>User-Agent</code></td>
+<td>客户端将它的操作系统、浏览器和其他属性告诉服务器</td>
+</tr>
+<tr>
+<td align="center"><code>Connection</code></td>
+<td>当前连接是否保持，如<code>Connection:Keep-Alive</code></td>
+</tr>
+</tbody></table>
+<p>HTTP响应头：</p>
+<table>
+<thead>
+<tr>
+<th>响应头</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Server</code></td>
+<td>使用的服务器名称，如<code>Server:Apache/1.3.6(Unix)</code></td>
+</tr>
+<tr>
+<td><code>Content-Type</code></td>
+<td>指定发送给接收者的实体正文的媒体类型,如<code>Content-type:text/html;charset=GBK</code></td>
+</tr>
+<tr>
+<td><code>Content-Encoding</code></td>
+<td>与请求报头<code>Accept-Encoding</code>对应，告诉浏览器服务端采用的是什么压缩编码</td>
+</tr>
+<tr>
+<td><code>Content-Language</code></td>
+<td>描述了资源所用的自然语言，与<code>Accpet-Encoding</code>对应</td>
+</tr>
+<tr>
+<td><code>Content-Length</code></td>
+<td>指明实体正文的长度，用以字节方式存储的十进制数字表示</td>
+</tr>
+<tr>
+<td><code>Keep-Alive</code></td>
+<td>保持连接的时间，如<code>Keep-Alive:timeout=5,max=120</code></td>
+</tr>
+</tbody></table>
+<p>HTTP状态码:</p>
+<table>
+<thead>
+<tr>
+<th align="center">状态码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">200</td>
+<td>客户端请求成功</td>
+</tr>
+<tr>
+<td align="center">302</td>
+<td>临时跳转，跳转的地址通过<code>Location</code>指定</td>
+</tr>
+<tr>
+<td align="center">400</td>
+<td>客户端语法错误，不能被服务器识别</td>
+</tr>
+<tr>
+<td align="center">403</td>
+<td>服务器收到请求，但是拒绝提供服务</td>
+</tr>
+<tr>
+<td align="center">404</td>
+<td>请求的资源不存在</td>
+</tr>
+<tr>
+<td align="center">500</td>
+<td>服务器发生不可预期的错误</td>
+</tr>
+</tbody></table>
+<p>可以通过浏览器的debug模式查看请求头<code>F12</code>。</p>
+<p>浏览器缓存是一个非常重要的机制。一般浏览页面发现有异常：一是因为浏览器做了缓存，<code>Ctrl + F5</code>或者<code>Shift + Command + R</code>可以使浏览器直接向目标URL请求，不使用浏览器缓存；二是请求正常到了服务端，但是访问到的是服务端缓存的数据。</p>
+<p>在我们使用<code>Ctrl + F5</code>或者<code>Shift + Command + R</code>刷新页面时，HTTP的请求头重会增加一些请求头，告诉浏览器要获取最新数据而不是缓存。HTTP Header中会多出如下请求头：</p>
+<p><img src="https://images.effiu.cn/blog/web/01.png" alt="请求头"></p>
+<h5 id="1-Cache-Control-Pragma"><a href="#1-Cache-Control-Pragma" class="headerlink" title="1. Cache-Control/Pragma"></a>1. Cache-Control/Pragma</h5><p>这个HTTP Header字段用于指定所有缓存机制在整个请求/响应链中必须服从的指令，通过该参数可以控制浏览器，还可以控制和HTTP相关的缓存或者代理服务器。其可选值如下：</p>
+<table>
+<thead>
+<tr>
+<th>可选值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Public</code></td>
+<td>所有内容将被缓存，在响应头中设置</td>
+</tr>
+<tr>
+<td><code>Private</code></td>
+<td>内容只缓存到私有缓存中，在响应头中设置</td>
+</tr>
+<tr>
+<td><code>no-cache</code></td>
+<td>所有内容都不会被缓存，在请求头和响应头中设置</td>
+</tr>
+<tr>
+<td><code>no-store</code></td>
+<td>所有内容都不会被缓存到缓存或者Internet临时文件中，在响应头中设置</td>
+</tr>
+<tr>
+<td><code>must-revalidation/proxy-revalidation</code></td>
+<td>若缓存内容失效，请求必须发送到服务器/代理以进行重新验证，在请求头中设置</td>
+</tr>
+<tr>
+<td><code>max-age=xxx</code></td>
+<td>缓存的内容将在xxx秒后失效，只在HTTP1.1中可用和Last-Modified一起使用时优先级较高，在响应头中设置</td>
+</tr>
+</tbody></table>
+<p><code>Cache-Control</code>请求头中字段被各个浏览器支持的较好，而且它的优先级也比较高，和其他请求字段(<code>Expires</code>)同时出现时，<code>Cache-Control</code>会覆盖其他字段。</p>
+<p><code>Pragma</code>字段与<code>Cache-Control</code>作用类似，也是在HTTP头中包含一个特殊的指令，使相关的服务器遵守该指令，最常用的是<code>Pragma:no-cache</code>和<code>Cache-Control:no-cache</code>作用一致。</p>
+<h5 id="2-Expires"><a href="#2-Expires" class="headerlink" title="2. Expires"></a>2. Expires</h5><p>Expires通常的使用格式是<code>Expires: Sat, 19 Dec 2019 23:22:17 GMT</code>,后面跟着一个日期和时间，超过这个时间后，缓存的内容将失效，浏览器在发出请求前会检查该字段，若过期就会重新向服务器发出请求。</p>
+<h5 id="3-Last-Modified-Etag"><a href="#3-Last-Modified-Etag" class="headerlink" title="3. Last-Modified/Etag"></a>3. Last-Modified/Etag</h5><p><code>Last-Modified</code>字段一般用于表示一个服务器上的资源的最后修改时间，可以是静态资源(静态内容自动加上``Last-Modified<code>字段)或者动态内容(如</code>Servlet<code>提供了一个</code>getLastModified`方法用于检查某个动态内容是否已经更新)，通过这个最后修改时间可以判断当前请求的资源是否是最新的。</p>
+<p>一般服务端会在响应头中返回一个<code>Last-Modified</code>，告诉浏览器这个页面的最后修改时间，浏览器会在请求服务端时在请求头中增加一个<code>If-Modified-Since: Sat, 20 Dec 2019 23:22:17 GMT</code>，询问当前服务器缓存的页面是否时最新的，如果是最新的就返回304状态，告诉浏览器其缓存的内容是最新的，服务器也不会传输新的数据。</p>
+<p><code>Etag</code>与<code>Last-Modified</code>有类似的功能，作用是让服务器给每个页面分配一个唯一的编号，然后通过这个编号区分当前这个页面是否时最新的。其比<code>Last-Modified</code>更加灵活，但是后端Web服务器有多台时比较难处理，因为每个Web服务器要记住网站的所有资源，否则浏览器传输编号就没有意义了。</p>
+<h3 id="4-DNS域名解析"><a href="#4-DNS域名解析" class="headerlink" title="4. DNS域名解析"></a>4. DNS域名解析</h3><p>互联网是通过URL来发布和请求资源的，而URL中的域名需要解析成IP地址才可以与远程主机建立连接，将域名解析成IP地址就是DNS解析的工作范畴。</p>
+<h5 id="1-DNS域名解析的过程"><a href="#1-DNS域名解析的过程" class="headerlink" title="1. DNS域名解析的过程"></a>1. DNS域名解析的过程</h5><p>当我们输入<code>www.effiu.cn</code>时，DNS解析将近有10个步骤：</p>
+<ul>
+<li><p>浏览器会坚持缓存中有没有这个域名对应的ip地址，若有则直接DNS解析过程结束。</p>
+<p>浏览器缓存的域名一般有时间限制，没有缓存大小限制，域名缓存的时间可以通过TTL属性来设置，通常是几分钟到几小时不等，时间太长若域名解析到的IP有变化，可能会导致该域名不能被正常解析。</p>
+</li>
+<li><p>若用户浏览器中没有缓存，浏览器会查找系统缓存中是否有这个域名对应的DNS解析,即hosts文件。</p>
+</li>
+<li><p>当上述两个步骤都没有拿到域名对应的IP时，浏览器会根据网络配置中的“DNS服务器地址”获取域名对应的IP地址。本地区的域名服务器(LDNS, Local Domain Name System)，这个DNS服务器一般会缓存域名解析结果，其缓存时间是受域名解析失效时间控制的，一般缓存空间不是缓存失效的主要因素，80%以上的域名解析过程到这里就结束了</p>
+</li>
+<li><p>若LDNS仍然没有命中，就直接到<code>Root Server</code>域名服务器请求解析。</p>
+</li>
+<li><p>根域名服务器返回给本地域名服务器一个所查询域的主域名服务器(Generic top-level Domain Server, gTLD Server，国际顶级域名服务器)地址，例如：<code>com</code>、<code>cn</code>等。</p>
+</li>
+<li><p>本地域名服务器(Local DNS Server)再向上一步返回的gTLD服务器发送请求。</p>
+</li>
+<li><p>接受请求的gTLD服务器查找并返回此域名对应的<code>Name Server</code>域名服务器的地址，这个<code>Name Server</code>通常就是我们注册域名的服务器。</p>
+</li>
+<li><p><code>Name Server</code>域名服务器会查询存储的域名IP的映射关系表，正常情况下根据域名得到目标IP记录，连同一个TTL值返回给DNS Server域名服务器</p>
+</li>
+<li><p>返回该域名对应的IP和TTL值，LDNS会缓存这个域名和IP的对应关系，缓存的时间由TTL控制</p>
+</li>
+<li><p>把解析结果返回给用户，用户根据TTL值缓存在本地系统缓存中，域名解析过程结束。</p>
+</li>
+</ul>
+<p>在实际的域名解析过程中，可能并不只10步，Name Server可能存在多级，或者有个GTM来负载均衡控制等等，都会影响域名解析的过程。</p>
+<p><img src="https://images.effiu.cn/blog/web/02.png" alt="DNS解析过程"></p>
+<h5 id="2-跟踪域名解析过程"><a href="#2-跟踪域名解析过程" class="headerlink" title="2. 跟踪域名解析过程"></a>2. 跟踪域名解析过程</h5><p><code>nslookup</code>命令查询域名的解析结果：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">192:~ zhangshuai$ nslookup</span><br><span class="line">&gt; www.effiu.cn</span><br><span class="line">Server:		192.168.1.1</span><br><span class="line">Address:	192.168.1.1#53</span><br><span class="line"></span><br><span class="line">Non-authoritative answer:</span><br><span class="line">Name:	www.effiu.cn</span><br><span class="line">Address: 47.93.44.41</span><br></pre></td></tr></table></figure>
+
+<p>linux中还可以使用<code>dig</code>命令查询DNS解析过程</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">192:~ zhangshuai$ dig www.effiu.cn</span><br><span class="line"></span><br><span class="line">; &lt;&lt;&gt;&gt; DiG 9.10.6 &lt;&lt;&gt;&gt; www.effiu.cn</span><br><span class="line">;; global options: +cmd</span><br><span class="line">;; Got answer:</span><br><span class="line">;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 50572</span><br><span class="line">;; flags: qr rd ra ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0</span><br><span class="line"></span><br><span class="line">;; QUESTION SECTION:</span><br><span class="line">;www.effiu.cn.			IN	A</span><br><span class="line"></span><br><span class="line">;; ANSWER SECTION:</span><br><span class="line">www.effiu.cn.		564	IN	A	47.93.44.41</span><br><span class="line"></span><br><span class="line">;; Query time: 43 msec</span><br><span class="line">;; SERVER: 192.168.1.1#53(192.168.1.1)</span><br><span class="line">;; WHEN: Sat Dec 21 23:50:55 CST 2019</span><br><span class="line">;; MSG SIZE  rcvd: 46</span><br></pre></td></tr></table></figure>
+
+<p>可以通过增加<code>+trace</code>参数跟踪这个域名的解析过程：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">192:~ zhangshuai$ dig www.effiu.cn +trace</span><br><span class="line"></span><br><span class="line">; &lt;&lt;&gt;&gt; DiG 9.10.6 &lt;&lt;&gt;&gt; www.effiu.cn +trace</span><br><span class="line">;; global options: +cmd</span><br><span class="line">.			178960	IN	NS	i.root-servers.net.</span><br><span class="line">.			178960	IN	NS	j.root-servers.net.</span><br><span class="line">.			178960	IN	NS	b.root-servers.net.</span><br><span class="line">.			178960	IN	NS	f.root-servers.net.</span><br><span class="line">.			178960	IN	NS	k.root-servers.net.</span><br><span class="line">.			178960	IN	NS	d.root-servers.net.</span><br><span class="line">.			178960	IN	NS	l.root-servers.net.</span><br><span class="line">.			178960	IN	NS	e.root-servers.net.</span><br><span class="line">.			178960	IN	NS	a.root-servers.net.</span><br><span class="line">.			178960	IN	NS	g.root-servers.net.</span><br><span class="line">.			178960	IN	NS	c.root-servers.net.</span><br><span class="line">.			178960	IN	NS	h.root-servers.net.</span><br><span class="line">.			178960	IN	NS	m.root-servers.net.</span><br><span class="line">;; Received 228 bytes from 192.168.1.1#53(192.168.1.1) in 43 ms</span><br><span class="line"></span><br><span class="line">cn.			172800	IN	NS	g.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	ns.cernet.net.</span><br><span class="line">cn.			172800	IN	NS	f.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	e.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	c.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	b.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	d.dns.cn.</span><br><span class="line">cn.			172800	IN	NS	a.dns.cn.</span><br><span class="line">cn.			86400	IN	DS	57724 8 2 5D0423633EB24A499BE78AA22D1C0C9BA36218FF49FD95A4CDF1A4AD 97C67044</span><br><span class="line">cn.			86400	IN	RRSIG	DS 8 1 86400 20200103050000 20191221040000 22545 . d1nPbFmZHVn2KpW4WrHWVrkTpTsJ63GPNtOs+gVA2UW0PqPbTHAZyxwp +crIQv2m&#x2F;p3a20Jqg0hOfsvyUirvuSD89QuC4hy7kgrYpB2oQYRWvIsM QGtnoQ4QfzIbQe42OBeg0u0X6erPzRTRr6qrXe0UeF1HH0J3+GjUH1iu mwp+cNZgiT3Qu&#x2F;6fUNHk8GfK7m1YW2D5dJQ1cMg&#x2F;HFoOaNu8ukVRAELV tDosFiwHYCF5DZl4xifVNBo2Y7+sctK3DaHoeP5fNhx1k7tlubhmCbhz LR2wTlY3J8ip40MQbpqy8KQ8QWJ1OX0a0Zq+4shHItov&#x2F;W8NGJNtNQ2E 3FJNEg&#x3D;&#x3D;</span><br><span class="line">;; Received 703 bytes from 192.33.4.12#53(c.root-servers.net) in 274 ms</span><br><span class="line"></span><br><span class="line">effiu.cn.		86400	IN	NS	dns18.hichina.com.</span><br><span class="line">effiu.cn.		86400	IN	NS	dns17.hichina.com.</span><br><span class="line">3QDAQA092EE5BELP64A74EBNB8J53D7E.cn. 21600 IN NSEC3 1 1 10 AEF123AB 3QLMP0QRNQ96G5AFGOPNB7U7IJ4MBP4B  NS SOA RRSIG DNSKEY NSEC3PARAM</span><br><span class="line">3QDAQA092EE5BELP64A74EBNB8J53D7E.cn. 21600 IN RRSIG NSEC3 8 2 21600 20200101065432 20191202062424 38388 cn. oFAeE9H34W7CjRHFrdHRrynWgA837Pgu&#x2F;vLk9CneIuZn7W8SfYq13wDi x46ovL7PGmVBc9vMkcb67VMw+1qpOkQ4D4djxbMgy7N+QdG7hR3xkDk4 6hzDbYESgX87C0G239makcSBxYHn4GEOluChDaTftrv3No29p5G3tjvY RKk&#x3D;</span><br><span class="line">JC6NUT570N3QHIFT13HQMGKSAHVDGMHK.cn. 21600 IN NSEC3 1 1 10 AEF123AB JC9LRV8ERLF97O8994NMP07BAT6UT3A9  CNAME RRSIG</span><br><span class="line">JC6NUT570N3QHIFT13HQMGKSAHVDGMHK.cn. 21600 IN RRSIG NSEC3 8 2 21600 20200101070305 20191202062116 38388 cn. ZHEERQcOwnz90k0tS5lGjVbMg4R+nJu8Eyl0ajzJXl4faxPoOb8Q1LQf rFOY6Z&#x2F;XRANpnM&#x2F;6H2Nb3Na3mG1R64OQadGVfFl3nm43CTJGJKQxRKG8 HAsjXeU9UHvWWVD1TbOg6SWNBoMcRvqDBo3P4VGqbz1ojWXPJt+XTZan Pqc&#x3D;</span><br><span class="line">;; Received 583 bytes from 195.219.8.90#53(f.dns.cn) in 366 ms</span><br><span class="line"></span><br><span class="line">www.effiu.cn.		600	IN	A	47.93.44.41</span><br><span class="line">;; Received 57 bytes from 106.11.141.128#53(dns18.hichina.com) in 41 ms</span><br></pre></td></tr></table></figure>
+
+<h5 id="3-清除缓存的域名"><a href="#3-清除缓存的域名" class="headerlink" title="3. 清除缓存的域名"></a>3. 清除缓存的域名</h5><p>DNS域名解析后会缓存解析结果，其中主要在两个地方缓存结果，一个是LDNS Server，另一个是用户的本地机器，这两个缓存都是TTL值和本机缓存大小控制的，但是最大缓存时间是TTL值，一般我们只能控制本机的DNS缓存。</p>
+<p>Windows下使用<code>ipconfig/flushdns</code>命令可以刷新缓存。</p>
+<p>Linux下使用<code>/etc/init.d/nscd restart</code>来清除缓存。</p>
+<p>在Java应用中JVM也会缓存DNS解析结果，这个缓存是在<code>InetAddress</code>类中完成的，其缓存策略是：正确解析结果缓存和失败的解析结果缓：这两个缓存时间由<code>%JAVA_HOME/lib/security/java.securith</code>文件中配置的，其分别是<code>networkaddress.cache.ttl</code>和<code>networkaddress.cache.negative.ttl</code>，默认值分别为-1(用不失效)和10(缓存10s)，若要修改其缓存时间可以修改<code>java.security</code>文件或者增加启动参数：<code>-Dsun.net.inetaddr.ttl=xxx</code>来修改默认值、通过<code>InetAddress</code>类动态修改。</p>
+<p>若我们需要<font color="red">使用<code>InetAddress</code>类解析域名，必须是单例模式，否则会有严重的性能问题</font>。</p>
+<h5 id="4-几种域名解析方式"><a href="#4-几种域名解析方式" class="headerlink" title="4. 几种域名解析方式"></a>4. 几种域名解析方式</h5><p>域名解析记录主要分为：A记录、MX记录、CNAME记录、NS记录和TXT记录。</p>
+<ul>
+<li>A记录，A代表的是Address，用来指定域名对应的IP地址，其可以将多个域名解析到一个IP地址。</li>
+<li>MX记录，表示的是Mail Exhange，就是可以将某个域名下的邮件服务器指向自己的Mail Server。如，<code>effiu.cn</code>域名的A记录IP地址是<code>47.93.44.41</code>，那么若将MX地址设置为<code>47.93.44.40</code>，即<code>xxx@effiu.cn</code>的邮件路由，DNS会将邮件发送到<code>47.93.44.40</code>所在的服务器，正常通过Web的请求仍然会解析到A记录的IP地址</li>
+<li>CNAME记录，全称是<code>Canonical Name</code>(别名解析)。别名解析就是可以为一个域名设置多个别名。</li>
+<li>NS记录，为某个域名指定的DNS解析服务器，即这个域名有指定的IP地址的DNS服务器去解析。</li>
+<li>TXT记录，为某个主机名或域名设置说明</li>
+</ul>
+<h3 id="5-CDN工作机制"><a href="#5-CDN工作机制" class="headerlink" title="5. CDN工作机制"></a>5. CDN工作机制</h3><p>CDN是一种内容分布网络(Content Delivery Network)，是构筑在现有网络上的一种先进的流量分配网络。目的是通过在现有的Internet中增加一层新的网络架构，将网站内容发布到最接近用户的网络“边缘”，使用户可以就近取得多所需的内容，提高用户访问网站的响应速度。CDN=镜像(Mirror)+缓存(Cache)+整体负载均衡(GSLB)，所以可以明显提高网络中信息流动的效率。</p>
+<p>目前CDN都以缓存网站中的静态数据为主，如CSS、js、图片和静态页面等数据。用户再从服务器中拿到动态内容后，从CDN上下载这些静态数据，从而加速网页数据的下载速度。</p>
+<p>CDN要达到以下几个目标：</p>
+<ul>
+<li>可扩展(Scalability)。性能可扩展性：可以应对新增的大量数据、用户和事物的扩展能力，成本可扩展性，用低廉的运营成本提供动态的服务能力和高质量的内容分发。</li>
+<li>安全性(Security)。强调提供物理设备、网络、软件、数据和服务过程的安全，减少因为DDoS攻击或者其他恶意行为造成商业网站的业务中断。</li>
+<li>可靠性、响应和执行(Reliablity、Responsiveness、Performance)。服务可用性指能够处理可能的故障和用户体验下降的问题，通过负载均衡及时提供网络的容错机制</li>
+</ul>
+<h5 id="1-CDN架构"><a href="#1-CDN架构" class="headerlink" title="1. CDN架构"></a>1. CDN架构</h5><p><img src="https://images.effiu.cn/blog/web/03.png" alt="CDN架构"></p>
+<p>当用户请求静态文件时，首先需要向LDNS服务器发起请求，经过迭代解析后回到这个域名的注册服务器去解析，一般每个公司都会有一个DNS解析服务器。这是这个DNS服务器通常会把它重新CNAME解析到另外一个域名，这个域名最终会被指向CDN全局中的DNS负载均衡服务器，再由这个GTM来最终分配是哪个地方的用户，返回给离这个访问用户最近的CND节点。若CDN中不存在该文件，就会再去原站获取这个文件，然后再返回给用户。</p>
+<h5 id="2-负载均衡"><a href="#2-负载均衡" class="headerlink" title="2. 负载均衡"></a>2. 负载均衡</h5><p>负载均衡(Load Balance)是对工作任务进行平衡、分摊到多个操作单元上执行，如图片服务器、应用服务器等，它们共同完成任务。可以提高服务器响应速度及利用效率，避免软硬件模块出现单点失效，解决网络拥塞问题，实现地理位置无关性，提高用户访问体验等等。</p>
+<p>通常有3种负载均衡架构，链路负载均衡、集群负载均衡和操作系统负载均衡。</p>
+<ul>
+<li><p>链路负载均衡是前面提到的DNS解析成不同的IP的过程，然后用户根据IP来访问不同的目标服务器。</p>
+<p>负载均衡是由DNS解析完成的，用户最终访问哪个Web Server是由DNS Server来控制的。优点是用户会直接访问目标服务器，而不需要经过其他的代理服务器，访问速度更快。缺点是DNS在用户本地和LDNS都会缓存IP，一旦某台服务器挂掉，那么很难及时更新用户的域名解析结构。</p>
+</li>
+<li><p>集群负载是一种非常流行的负载方式，一般分为硬件负载(如：F5)和软件负载均衡，软件负载是最普遍的一种负载方式，特点是成本低、一次访问要经过多次代理服务器，会增加网络延时。</p>
+</li>
+<li><p>操作系统负载，是利用操作系统级别的软中断或者硬件终端来达到负载均衡，例如设置多队列网卡等来实现。</p>
+</li>
+</ul>
+<h5 id="3-CDN动态加速"><a href="#3-CDN动态加速" class="headerlink" title="3. CDN动态加速"></a>3. CDN动态加速</h5><p>CDN的动态加速原理是在CDN的DNS解析中通过动态的链路探测来寻找回源最好的一条路径，然后经过CDN调度将所有请求调度到选定的这条路径上回源。</p>
+<p><img src="https://images.effiu.cn/blog/web/04.png" alt="CDN动态加速"></p>
+<p>由于CDN节点是遍布全国的，所以用户接入一个CND节点后，可以选择一条从离用户最近的CDN节点到源站链路最好的路径让用户走。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/12/09/algorithm/1-algorithm-basis/" rel="prev" title="algorithm 基础">
+      <i class="fa fa-chevron-left"></i> algorithm 基础
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/03/01/web/2-1-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/" rel="next" title="Java I/O的工作机制(1)">
+      Java I/O的工作机制(1) <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

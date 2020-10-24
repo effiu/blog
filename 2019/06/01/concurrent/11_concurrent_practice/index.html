@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="1. 生产者和消费者模式 并发编程中， 生产者和消费者模式可以解决绝大部分并发问题。 生产者和消费者模式是通过一个容器解决生产者和消费者的耦合问题，彼此之间不通信，而是通过阻塞队列进行通信。   多核时代，多线程并发处理速度比单线程更快，所以使用多个线程生产数据，多个线程消费数据，甚至消费者消费数据后，又作为生产者把数据放到新的队列里。    Java的线程池就是一种生产者和消费者模式的实现方式。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="并发编程实践">
+<meta property="og:url" content="https://www.effiu.cn/2019/06/01/concurrent/11_concurrent_practice/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="1. 生产者和消费者模式 并发编程中， 生产者和消费者模式可以解决绝大部分并发问题。 生产者和消费者模式是通过一个容器解决生产者和消费者的耦合问题，彼此之间不通信，而是通过阻塞队列进行通信。   多核时代，多线程并发处理速度比单线程更快，所以使用多个线程生产数据，多个线程消费数据，甚至消费者消费数据后，又作为生产者把数据放到新的队列里。    Java的线程池就是一种生产者和消费者模式的实现方式。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/78.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/79.jpg">
+<meta property="article:published_time" content="2019-06-01T03:14:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/78.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/06/01/concurrent/11_concurrent_practice/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>并发编程实践 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E7%94%9F%E4%BA%A7%E8%80%85%E5%92%8C%E6%B6%88%E8%B4%B9%E8%80%85%E6%A8%A1%E5%BC%8F"><span class="nav-number">1.</span> <span class="nav-text">1. 生产者和消费者模式</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E7%BA%BF%E4%B8%8A%E9%97%AE%E9%A2%98%E5%AE%9A%E4%BD%8D"><span class="nav-number">2.</span> <span class="nav-text">2. 线上问题定位</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95"><span class="nav-number">3.</span> <span class="nav-text">3. 性能测试</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-%E5%BC%82%E6%AD%A5%E4%BB%BB%E5%8A%A1%E6%B1%A0"><span class="nav-number">4.</span> <span class="nav-text">4. 异步任务池</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/06/01/concurrent/11_concurrent_practice/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          并发编程实践
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-06-01 11:14 11:14:00" itemprop="dateCreated datePublished" datetime="2019-06-01T11:14:00+08:00">2019-06-01 11:14</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/06/01/concurrent/11_concurrent_practice/" class="post-meta-item leancloud_visitors" data-flag-title="并发编程实践" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/06/01/concurrent/11_concurrent_practice/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/06/01/concurrent/11_concurrent_practice/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h5 id="1-生产者和消费者模式"><a href="#1-生产者和消费者模式" class="headerlink" title="1. 生产者和消费者模式"></a>1. 生产者和消费者模式</h5><blockquote>
+<p>并发编程中， 生产者和消费者模式可以解决绝大部分并发问题。 生产者和消费者模式是通过一个容器解决生产者和消费者的耦合问题，彼此之间不通信，而是通过阻塞队列进行通信。</p>
+</blockquote>
+<blockquote>
+<p>多核时代，多线程并发处理速度比单线程更快，所以使用多个线程生产数据，多个线程消费数据，甚至消费者消费数据后，又作为生产者把数据放到新的队列里。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/78.jpg" alt="多生产者消费者模式"></p>
+<blockquote>
+<p>Java的线程池就是一种生产者和消费者模式的实现方式。生产者把任务给线程池，线程池处理任务，而且线程池会在将要运行任务数大于线程池基本线程数时把任务放到阻塞队列中。</p>
+</blockquote>
+<h5 id="2-线上问题定位"><a href="#2-线上问题定位" class="headerlink" title="2. 线上问题定位"></a>2. 线上问题定位</h5><blockquote>
+<p>查看日志、系统状态、dump线程信息等</p>
+<p>top查看进程运行状态，<code>COMMAND</code>是进程启动命令，<code>%MEM</code>CPU利用率。</p>
+</blockquote>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">top - 16:25:20 up 657 days, 21:39,  1 user,  load average: 0.00, 0.01, 0.05</span><br><span class="line">Tasks:  69 total,   1 running,  68 sleeping,   0 stopped,   0 zombie</span><br><span class="line"><span class="meta">%</span><span class="bash">Cpu(s):  0.3 us,  0.3 sy,  0.0 ni, 99.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st</span></span><br><span class="line">KiB Mem :  1016396 total,    69612 free,   761020 used,   185764 buff/cache</span><br><span class="line">KiB Swap:        0 total,        0 free,        0 used.    87244 avail Mem </span><br><span class="line"></span><br><span class="line">  PID USER      PR  NI    VIRT    RES    SHR S %CPU %MEM     TIME+ COMMAND </span><br><span class="line">30769 root       0 -20  128624   8684   5084 S  0.7  0.9  89:08.25 AliYunDun             </span><br><span class="line">28276 root      20   0  157568   2128   1528 R  0.3  0.2   0:00.09 top                   </span><br><span class="line">28706 root      20   0 2322768 196616   3172 S  0.3 19.3  24:50.92 java                   </span><br><span class="line">    1 root      20   0   43212   2424   1256 S  0.0  0.2   4:50.29 systemd</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>top -Hp pid</code>查看某个进程的线程信息，一般有3种情况</p>
+</blockquote>
+<ul>
+<li>某个线程CPU利用率一直100%，说明该线程有可能死循环，记录<strong>PID</strong>，也有可能是GC导致的，可以使用<code>jstat</code>查看GC情况</li>
+<li>某个线程一直在TOP 10位置，说明该线程性能有问题</li>
+<li>CPU利用率高的线程在不断变化，说明不是一个线程导致的CPU偏高</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">  PID USER      PR  NI    VIRT    RES    SHR S %CPU %MEM     TIME+ COMMAND</span><br><span class="line"><span class="number">28706</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">00</span> java                   </span><br><span class="line"><span class="number">28707</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">76</span> java                  </span><br><span class="line"><span class="number">28708</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">47.56</span> java                   </span><br><span class="line"><span class="number">28709</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">01</span> java                   </span><br><span class="line"><span class="number">28710</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">01</span> java                   </span><br><span class="line"><span class="number">28711</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">00</span> java                   </span><br><span class="line"><span class="number">28712</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">20.75</span> java                   </span><br><span class="line"><span class="number">28713</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">09.80</span> java                   </span><br><span class="line"><span class="number">28714</span> root      <span class="number">20</span>   <span class="number">0</span> <span class="number">2322768</span> <span class="number">196616</span>   <span class="number">3172</span> S  <span class="number">0.0</span> <span class="number">19.3</span>   <span class="number">0</span>:<span class="number">00</span>.<span class="number">00</span> java</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>jstat -gc 28706 5000</code>，查看java进程的JVM统计信息</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> S0C    S1C    S0U    S1U      EC       EU        OC         OU       MC     MU    CCSC   CCSU   YGC     YGCT    FGC    FGCT     GCT   </span><br><span class="line"><span class="number">2688.0</span> <span class="number">2688.0</span>  <span class="number">0.0</span>    <span class="number">70.2</span>  <span class="number">21760.0</span>  <span class="number">16491.0</span>   <span class="number">54156.0</span>    <span class="number">38140.2</span>   <span class="number">41600.0</span> <span class="number">40620.6</span> <span class="number">4736.0</span> <span class="number">4485.4</span>    <span class="number">787</span>    <span class="number">2.267</span>   <span class="number">5</span>      <span class="number">0.307</span>    <span class="number">2.574</span></span><br><span class="line"><span class="number">2688.0</span> <span class="number">2688.0</span>  <span class="number">0.0</span>    <span class="number">70.2</span>  <span class="number">21760.0</span>  <span class="number">16491.0</span>   <span class="number">54156.0</span>    <span class="number">38140.2</span>   <span class="number">41600.0</span> <span class="number">40620.6</span> <span class="number">4736.0</span> <span class="number">4485.4</span>    <span class="number">787</span>    <span class="number">2.267</span>   <span class="number">5</span>      <span class="number">0.307</span>    <span class="number">2.574</span></span><br><span class="line"><span class="number">2688.0</span> <span class="number">2688.0</span>  <span class="number">0.0</span>    <span class="number">70.2</span>  <span class="number">21760.0</span>  <span class="number">16493.1</span>   <span class="number">54156.0</span>    <span class="number">38140.2</span>   <span class="number">41600.0</span> <span class="number">40620.6</span> <span class="number">4736.0</span> <span class="number">4485.4</span>    <span class="number">787</span>    <span class="number">2.267</span>   <span class="number">5</span>      <span class="number">0.307</span>    <span class="number">2.574</span></span><br><span class="line"><span class="number">2688.0</span> <span class="number">2688.0</span>  <span class="number">0.0</span>    <span class="number">70.2</span>  <span class="number">21760.0</span>  <span class="number">16493.1</span>   <span class="number">54156.0</span>    <span class="number">38140.2</span>   <span class="number">41600.0</span> <span class="number">40620.6</span> <span class="number">4736.0</span> <span class="number">4485.4</span>    <span class="number">787</span>    <span class="number">2.267</span>   <span class="number">5</span>      <span class="number">0.307</span>    <span class="number">2.574</span></span><br><span class="line"><span class="number">2688.0</span> <span class="number">2688.0</span>  <span class="number">0.0</span>    <span class="number">70.2</span>  <span class="number">21760.0</span>  <span class="number">16493.1</span>   <span class="number">54156.0</span>    <span class="number">38140.2</span>   <span class="number">41600.0</span> <span class="number">40620.6</span> <span class="number">4736.0</span> <span class="number">4485.4</span>    <span class="number">787</span>    <span class="number">2.267</span>   <span class="number">5</span>      <span class="number">0.307</span>    <span class="number">2.574</span></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>C只当前大小，U指当前使用大小，S是<code>Survivor</code>，E是<code>Edon</code>，O是老年代，M是方法区，CCS压缩类空间，GC是垃圾回收，T是time</p>
+</blockquote>
+<blockquote>
+<p>其他命令：</p>
+</blockquote>
+<ul>
+<li><code>jstat -class pid</code>，类加载统计</li>
+<li><code>jstat -compiler pid</code>，编译统计</li>
+<li><code>jstat -gccapacity pid</code>，堆内存统计</li>
+<li><code>jstat -gcnew pid</code>，新生代垃圾回收统计</li>
+<li>等待</li>
+</ul>
+<blockquote>
+<p><code>jinfo</code>，查看JVM信息，部分信息如下：</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Non-<span class="keyword">default</span> VM flags: -XX:CICompilerCount=<span class="number">2</span> -XX:InitialHeapSize=<span class="number">16777216</span> -XX:MaxHeapSize=<span class="number">262144000</span> -XX:MaxNewSize=<span class="number">87359488</span> -XX:=<span class="number">196608</span> -XX:NewSize=<span class="number">5570560</span> -XX:OldSize=<span class="number">11206656</span> -XX:+UseCompressedClassPointers -XX:+UseCompressedOops </span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>InitialHeapSize</code>，初始化堆大小</li>
+<li><code>MaxHeapSize</code>，最大堆空间</li>
+<li><code>MaxNewSize</code>，最大新生代大小</li>
+<li><code>OldSize</code>，老年代大小</li>
+</ul>
+<blockquote>
+<p><code>jstack pid</code>，查看指定进程的线程信息</p>
+</blockquote>
+<h5 id="3-性能测试"><a href="#3-性能测试" class="headerlink" title="3. 性能测试"></a>3. 性能测试</h5><ul>
+<li><p><code>netstat -nat | grep port -c</code>，查看连接指定端口的服务器个数，例如: <code>netstat -nat | grep 3306 -c</code>查看数据库连接数</p>
+</li>
+<li><p><code>cat /proc/net/dev</code>，查看网络流量</p>
+</li>
+<li><p><code>cat /proc/loadavg </code>，查看系统平均负载</p>
+</li>
+<li><p><code>cat /proc/meminfo </code>，查看系统内存情况</p>
+</li>
+<li><p><code>cat /proc/stat</code>，查看CPU利用率</p>
+</li>
+</ul>
+<h5 id="4-异步任务池"><a href="#4-异步任务池" class="headerlink" title="4. 异步任务池"></a>4. 异步任务池</h5><p><img src="https://images.effiu.cn/gitbook/concurrent/79.jpg" alt="异步任务池"></p>
+<blockquote>
+<p>任务池的主要处理流程是，每台机器会启动一个任务池，每个任务池里有多个线程池，当<br>某台机器将一个任务交给任务池后，任务池会先将这个任务保存到数据库中，然后某台机器上<br>的任务池会从数据库中获取待执行的任务，再执行这个任务。 </p>
+</blockquote>
+<blockquote>
+<p>每个任务有几种状态，分别是<strong style='color:red'>创建（NEW）、执行中（EXECUTING）、RETRY（重试）、挂起<br>（SUSPEND）、中止（TEMINER）和执行完成（FINISH）</strong>。</p>
+</blockquote>
+<ul>
+<li>创建：提交给任务池之后的状态。</li>
+<li>执行中：任务池从数据库中拿到任务执行时的状态。</li>
+<li>重试：当执行任务时出现错误，程序显式地告诉任务池这个任务需要重试，并设置下一次<br>执行时间。</li>
+<li>挂起：当一个任务的执行依赖于其他任务完成时，可以将这个任务挂起，当收到消息后，<br>再开始执行。</li>
+<li>中止：任务执行失败，让任务池停止执行这个任务，并设置错误消息告诉调用端。</li>
+<li>执行完成：任务执行结束。 </li>
+</ul>
+<blockquote>
+<p>设计注意事项：</p>
+</blockquote>
+<ul>
+<li>任务池的任务隔离，根据任务优先级隔离任务</li>
+<li>任务池的重试策略，根绝任务类型设置不同的重试策略</li>
+<li>任务池的使用，不能在执行机器上保存数据，防止多个机器执行出现问题，建议保存到其他集群中</li>
+<li>任务池的异步属性，任务名称、下次执行时间、已执行次数、任务类型、任务优先级和执行报错信息等</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/30/concurrent/10_executor/" rel="prev" title="Executor框架">
+      <i class="fa fa-chevron-left"></i> Executor框架
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/02/jvm/1_into_java/" rel="next" title="走进Java">
+      走进Java <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

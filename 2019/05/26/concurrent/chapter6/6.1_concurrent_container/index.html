@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="1.ConcurrentHashMap的实现原理与使用 java.util.concurrent.ConcurrentHashMap是线程安全且高效的HashMap。  1. 为什么要使用ConcurrentHashMap 并发编程中HashMap可能会导致程序死循环，HashTable效率低下。    JDK 7会导致死循环，JDK 8并不会   HashMap线程不安全，多线程环境下，Hash">
+<meta property="og:type" content="article">
+<meta property="og:title" content="并发容器与阻塞队列">
+<meta property="og:url" content="https://www.effiu.cn/2019/05/26/concurrent/chapter6/6.1_concurrent_container/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="1.ConcurrentHashMap的实现原理与使用 java.util.concurrent.ConcurrentHashMap是线程安全且高效的HashMap。  1. 为什么要使用ConcurrentHashMap 并发编程中HashMap可能会导致程序死循环，HashTable效率低下。    JDK 7会导致死循环，JDK 8并不会   HashMap线程不安全，多线程环境下，Hash">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/56.jpg">
+<meta property="og:image" content="https://images.effiu.cn/gitbook/concurrent/57.jpg">
+<meta property="article:published_time" content="2019-05-26T07:39:00.000Z">
+<meta property="article:modified_time" content="2019-09-01T16:54:36.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="concurrent">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/gitbook/concurrent/56.jpg">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/05/26/concurrent/chapter6/6.1_concurrent_container/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>并发容器与阻塞队列 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-ConcurrentHashMap%E7%9A%84%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BD%BF%E7%94%A8"><span class="nav-number">1.</span> <span class="nav-text">1.ConcurrentHashMap的实现原理与使用</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E4%BD%BF%E7%94%A8ConcurrentHashMap"><span class="nav-number">1.1.</span> <span class="nav-text">1. 为什么要使用ConcurrentHashMap</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-ConcurrentHashMap%E7%9A%84%E7%BB%93%E6%9E%84"><span class="nav-number">1.2.</span> <span class="nav-text">2. ConcurrentHashMap的结构</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-ConcurrentHashMap%E7%9A%84%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">1.3.</span> <span class="nav-text">3. ConcurrentHashMap的初始化</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-ConcurrentHashMap%E6%93%8D%E4%BD%9C"><span class="nav-number">1.4.</span> <span class="nav-text">3. ConcurrentHashMap操作</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-ConcurrentLinkedQueue"><span class="nav-number">2.</span> <span class="nav-text">2. ConcurrentLinkedQueue</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E9%98%BB%E5%A1%9E%E9%98%9F%E5%88%97"><span class="nav-number">3.</span> <span class="nav-text">3. 阻塞队列</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E4%BB%80%E4%B9%88%E6%98%AF%E9%98%BB%E5%A1%9E%E9%98%9F%E5%88%97"><span class="nav-number">3.1.</span> <span class="nav-text">1. 什么是阻塞队列</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-Java%E9%87%8C%E7%9A%84%E9%98%BB%E5%A1%9E%E9%98%9F%E5%88%97"><span class="nav-number">3.2.</span> <span class="nav-text">2. Java里的阻塞队列</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E9%98%BB%E5%A1%9E%E9%98%9F%E5%88%97%E7%9A%84%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86"><span class="nav-number">3.3.</span> <span class="nav-text">3. 阻塞队列的实现原理</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/05/26/concurrent/chapter6/6.1_concurrent_container/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          并发容器与阻塞队列
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-05-26 15:39 15:39:00" itemprop="dateCreated datePublished" datetime="2019-05-26T15:39:00+08:00">2019-05-26 15:39</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-09-02 00:54 00:54:36" itemprop="dateModified" datetime="2019-09-02T00:54:36+08:00">2019-09-02 00:54</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/concurrent/" itemprop="url" rel="index"><span itemprop="name">concurrent</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/05/26/concurrent/chapter6/6.1_concurrent_container/" class="post-meta-item leancloud_visitors" data-flag-title="并发容器与阻塞队列" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/05/26/concurrent/chapter6/6.1_concurrent_container/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/05/26/concurrent/chapter6/6.1_concurrent_container/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h5 id="1-ConcurrentHashMap的实现原理与使用"><a href="#1-ConcurrentHashMap的实现原理与使用" class="headerlink" title="1.ConcurrentHashMap的实现原理与使用"></a>1.ConcurrentHashMap的实现原理与使用</h5><blockquote>
+<p><code>java.util.concurrent.ConcurrentHashMap</code>是线程安全且高效的<code>HashMap</code>。</p>
+</blockquote>
+<h6 id="1-为什么要使用ConcurrentHashMap"><a href="#1-为什么要使用ConcurrentHashMap" class="headerlink" title="1. 为什么要使用ConcurrentHashMap"></a>1. 为什么要使用<code>ConcurrentHashMap</code></h6><blockquote>
+<p>并发编程中<code>HashMap</code>可能会导致程序死循环，<code>HashTable</code>效率低下。</p>
+</blockquote>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>JDK 7会导致死循环，JDK 8并不会</strong></li>
+</ul>
+<blockquote>
+<p><code>HashMap</code>线程不安全，多线程环境下，<code>HashMap</code>进行<code>put</code>操作会导致死循环，导致CPU利用率接近100%。多线程会导致<code>HashMap</code>的<code>Entry</code>链表形成环形数据结构，<code>Entry</code>的<code>next</code>节点永远不为空，就会产生死循环获取<code>Entry</code>。</p>
+<p><code>Hashtable</code>效率低下。其使用<code>synchronized</code>保证线程安全。</p>
+<p><code>ConcurrentHashMap</code>的锁分段技术可以有效提升并发访问率。<code>Hashtable</code>效率低下是因为其只有一把锁，导致所有线程竞争一把锁。<code>ConcurrentHashMap</code>所使用的<font style='color:red'>锁分段技术</font>，将数据分成一段一段的存储，然后每一段使用一把锁，当线程访问一段数据的时候，其他段的数据并不会被锁住，也可以被其他线程访问。</p>
+</blockquote>
+<h6 id="2-ConcurrentHashMap的结构"><a href="#2-ConcurrentHashMap的结构" class="headerlink" title="2. ConcurrentHashMap的结构"></a>2. <code>ConcurrentHashMap</code>的结构</h6><blockquote>
+<p>通过<code>ConcurrentHashMap</code>类图分析<code>ConcurrentHashMap</code>结构。</p>
+<p><code>ConcurrentHashMap</code>是由<code>Segment</code>数组结构和<code>HashEntry</code>数组结构组成。<code>Segment</code>是一种可重入锁(<code>ReentrantLock</code>)，其和<code>HashMap</code>结构类似，是一种数组和链表结构，每个<code>Segment</code>守护一个<code>HashEntry数组</code>里的额元素，对<code>HashEntry</code>数组的元素修改时，必须首先获得与它对应的<code>Segment</code>锁。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/56.jpg" alt="类图"></p>
+<p><img src="https://images.effiu.cn/gitbook/concurrent/57.jpg" alt="类图"></p>
+<h6 id="3-ConcurrentHashMap的初始化"><a href="#3-ConcurrentHashMap的初始化" class="headerlink" title="3. ConcurrentHashMap的初始化"></a>3. <code>ConcurrentHashMap</code>的初始化</h6><blockquote>
+<p><code>ConcurrentHashMap</code>的初始化是通过<code>initialCapacity</code>、<code>loadFactor</code>、<code>concurrentLevel</code>等几个 参数完成初始化<code>Segment</code>数组、段偏移量<code>segmentShift</code>、段掩码<code>segmentMask</code>和<code>segment</code>里的<code>HashEntry</code>数组实现的。</p>
+</blockquote>
+<ol>
+<li>初始化<code>segments</code>数组</li>
+</ol>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 是ssize从1向左移动的次数</span></span><br><span class="line"><span class="keyword">int</span> sshift = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">int</span> ssize = <span class="number">1</span>;</span><br><span class="line"><span class="comment">// segment数组长度是由ConcurrentLevel决定的</span></span><br><span class="line"><span class="comment">// 确定不小于ConcurrentLevel的最小的2的n次幂</span></span><br><span class="line"><span class="keyword">while</span> (ssize &lt; DEFAULT_CONCURRENCY_LEVEL) &#123;</span><br><span class="line">    ++sshift;</span><br><span class="line">    ssize &lt;&lt;= <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 确认参与散列运算的位数</span></span><br><span class="line"><span class="keyword">int</span> segmentShift = <span class="number">32</span> - sshift;</span><br><span class="line"><span class="comment">// 散列运算的掩码</span></span><br><span class="line"><span class="keyword">int</span> segmentMask = ssize - <span class="number">1</span>;</span><br><span class="line"><span class="meta">@SuppressWarnings(&quot;unchecked&quot;)</span></span><br><span class="line">Segment&lt;K,V&gt;[] segments = (Segment&lt;K,V&gt;[])</span><br><span class="line">    <span class="keyword">new</span> Segment&lt;?,?&gt;[DEFAULT_CONCURRENCY_LEVEL];</span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; segments.length; ++i)</span><br><span class="line">    segments[i] = <span class="keyword">new</span> Segment&lt;K,V&gt;(LOAD_FACTOR);</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>初始化每个<code>segment</code></li>
+</ol>
+<blockquote>
+<p>如上代码所示，默认初始化长度为<code>DEFAULT_CONCURRENCY_LEVEL=15</code>，默认<code>loadFactor=0.75f</code></p>
+</blockquote>
+<h6 id="3-ConcurrentHashMap操作"><a href="#3-ConcurrentHashMap操作" class="headerlink" title="3. ConcurrentHashMap操作"></a>3. <code>ConcurrentHashMap</code>操作</h6><ul>
+<li><input disabled="" type="checkbox"> <font color="red"><code>get()</code>、<code>put()</code>、<code>size()</code>源码</font>，JDK8有新变化</li>
+</ul>
+<h5 id="2-ConcurrentLinkedQueue"><a href="#2-ConcurrentLinkedQueue" class="headerlink" title="2. ConcurrentLinkedQueue"></a>2. <code>ConcurrentLinkedQueue</code></h5><blockquote>
+<p>并发编程中有时候需要使用线程安全的队列。实现线程安全的队列有两种方式：</p>
+</blockquote>
+<ul>
+<li>阻塞算法，使用一个(出入队列共用一把锁)或者两个锁(入队和出队使用不同的锁)</li>
+<li>非阻塞算法，使用循环CAS方式实现。</li>
+</ul>
+<blockquote>
+<p><code>ConcurrentLinkedQueue</code>是基于链接节点的无界线程安全队列，采用先进先出对节点进行排序</p>
+</blockquote>
+<ul>
+<li><input disabled="" type="checkbox"> <font style='color:red'>阅读<code>ConcurrentLinkedQueue</code>源码</font></li>
+</ul>
+<h5 id="3-阻塞队列"><a href="#3-阻塞队列" class="headerlink" title="3. 阻塞队列"></a>3. 阻塞队列</h5><h6 id="1-什么是阻塞队列"><a href="#1-什么是阻塞队列" class="headerlink" title="1. 什么是阻塞队列"></a>1. 什么是阻塞队列</h6><blockquote>
+<p>阻塞队列是一个支持两个附加操作的队列，阻塞插入和阻塞移除。</p>
+</blockquote>
+<ul>
+<li>支持阻塞的插入方法，当队列满时，队列会阻塞插入元素的线程，直到队列不满</li>
+<li>支持阻塞的移除方法，当队列为空时，获取元素的线程会等待队列变为非空</li>
+</ul>
+<blockquote>
+<p>常用于生产者和消费者的场景。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>方法/处理方式</th>
+<th>抛出异常</th>
+<th>返回特殊值(是否插入成功)</th>
+<th>一直阻塞</th>
+<th>超时退出</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>插入</td>
+<td>add(e)</td>
+<td>offer(e)</td>
+<td>put(e)</td>
+<td>offer(e, time, unit)</td>
+</tr>
+<tr>
+<td>移除</td>
+<td>remove()</td>
+<td>poll()</td>
+<td>take()</td>
+<td>poll(time, unit)</td>
+</tr>
+<tr>
+<td>检查</td>
+<td>element()</td>
+<td>peek()</td>
+<td>不可用</td>
+<td>不可用</td>
+</tr>
+</tbody></table>
+<h6 id="2-Java里的阻塞队列"><a href="#2-Java里的阻塞队列" class="headerlink" title="2. Java里的阻塞队列"></a>2. Java里的阻塞队列</h6><ul>
+<li><p><code>ArrayBlockingQueue</code></p>
+<ul>
+<li>由数组结构组成的有界阻塞队列</li>
+<li>先进先出的原则对元素排序</li>
+<li>默认情况不保证线程公平，为了保证公平，会降低吞吐量</li>
+</ul>
+</li>
+<li><p><code>LinkedBlockingQueue</code></p>
+<ul>
+<li>由链表结构组成的有界阻塞队列</li>
+<li>默认最大长度是<code>Integer.MAX_VALUE</code>，按照先进先出的规则进行元素排序</li>
+</ul>
+</li>
+<li><p><code>PriorityBlockingQueue</code></p>
+<ul>
+<li>支持优先级排序的无界阻塞队列</li>
+<li>默认采用自然顺序升序排列</li>
+<li>也可以自定义<code>compareTo()</code>指定元素排序规则，也可以构造<code>PriorityBlockingQueue</code>时指定<code>Comparator</code>对元素进行排序。不能保证同优先级元素的顺序</li>
+</ul>
+</li>
+<li><p><code>DelayQueue</code></p>
+<ul>
+<li><p>使用优先级队列实现的无界阻塞队列，使用<code>PriorityQueue</code>实现</p>
+</li>
+<li><p>队列中的元素必须实现<code>Delay</code>接口，创建元素时可以指定延迟时间。</p>
+</li>
+<li><p><font color='red'><code>DelayQueue</code>非常有用，有以下应用场景</font></p>
+<ul>
+<li>缓存系统，使用<code>DelayQueue</code>保存缓存元素的有效期，一旦成功获取表明缓存到期</li>
+<li>定时任务调度，使用<code>DelayQueue</code>保存当天执行的任务和执行时间，一旦获取到任务就开始执行</li>
+</ul>
+</li>
+<li><p>实现<code>Delay</code>接口</p>
+<ul>
+<li><p>在对象创建的时候，初始化基本数据，使用<code>time</code>记录当前对象延迟时间，<code>sequenceNumber</code>标识元素在队列中的先后顺序。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> AtomicLong sequencer = <span class="keyword">new</span> AtomoicLong(<span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">ScheduleFuturnTask(Runnable r, V result, <span class="keyword">long</span> ns, <span class="keyword">long</span> period)&#123;</span><br><span class="line">    <span class="keyword">super</span>(r, result);</span><br><span class="line">    <span class="keyword">this</span>.time = ns;</span><br><span class="line">    <span class="keyword">this</span>.period = period;</span><br><span class="line">    <span class="comment">// 顺序</span></span><br><span class="line">    <span class="keyword">this</span>.sequenceNumber = sequencer.getAndIncrement();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>实现<code>getDelay()</code>接口，返回当前元素还需要延时的时间，单位ns</p>
+</li>
+<li><p>实现<code>compareTo()</code>方法指定元素的顺序。</p>
+</li>
+</ul>
+</li>
+<li><p>实现延时阻塞队列，获取元素方法(<code>take()</code>、<code>poll()</code>)部分源码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">long</span> delay = first.getDelay(NANOSECONDS);</span><br><span class="line"><span class="keyword">if</span> (delay &lt;= <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> q.poll();</span><br><span class="line">first = <span class="keyword">null</span>; <span class="comment">// don&#x27;t retain ref while waiting</span></span><br><span class="line"><span class="comment">// leader是等待获取队列头元素的线程</span></span><br><span class="line"><span class="keyword">if</span> (leader != <span class="keyword">null</span>)</span><br><span class="line">    <span class="comment">// 说明已经有其他线程等待获取队列头元素</span></span><br><span class="line">    available.await();</span><br><span class="line"><span class="keyword">else</span> &#123;</span><br><span class="line">    Thread thisThread = Thread.currentThread();</span><br><span class="line">    leader = thisThread;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 等待接收信号或者delay时间</span></span><br><span class="line">        available.awaitNanos(delay);</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (leader == thisThread)</span><br><span class="line">            leader = <span class="keyword">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+</li>
+<li><p><code>SynchronousQueue</code></p>
+<ul>
+<li>不存储元素的阻塞队列，每个<code>put()</code>都必须等待<code>take()</code>操作，否则不能继续添加元素</li>
+<li>支持公平访问，默认情况下采用非公平策略访问队列</li>
+<li>其吞吐量高于<code>LinkedBlockingQueue</code>和<code>ArrayBlockingQueue</code></li>
+</ul>
+</li>
+<li><p><code>LinkedTransferQueue</code></p>
+<ul>
+<li>由链表结构组成的无界阻塞队列</li>
+<li>多个<code>tryTransfer()</code>和<code>transfer()</code>方法<ul>
+<li><code>transfer()</code>，如果当前消费者正在等待接收元素，<code>transfer</code>可以把生产者传入的元素立刻<code>transfer</code>给消费者，若没有消费者则将元素放在队列的tail节点，并等待该元素被消费了才返回</li>
+<li><code>tryTransfer()</code>，是用来试探生产者传入的元素是否能直接传给消费者。支持超时返回。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><code>LinkedBlockingDeque</code>：由链表结构组成的双向阻塞队列</p>
+</li>
+</ul>
+<h6 id="3-阻塞队列的实现原理"><a href="#3-阻塞队列的实现原理" class="headerlink" title="3. 阻塞队列的实现原理"></a>3. 阻塞队列的实现原理</h6><blockquote>
+<p>阻塞队列是使用<font color='red'>通知模式实现</font>，基本原理如下:</p>
+</blockquote>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/** Main lock guarding all access */</span></span><br><span class="line"><span class="keyword">final</span> ReentrantLock lock;</span><br><span class="line"></span><br><span class="line"><span class="comment">/** Condition for waiting takes */</span></span><br><span class="line"><span class="keyword">private</span> <span class="keyword">final</span> Condition notEmpty;</span><br><span class="line"></span><br><span class="line"><span class="comment">/** Condition for waiting puts */</span></span><br><span class="line"><span class="keyword">private</span> <span class="keyword">final</span> Condition notFull;</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ArrayBlockingQueue</span><span class="params">(<span class="keyword">int</span> capacity, <span class="keyword">boolean</span> fair)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (capacity &lt;= <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> IllegalArgumentException();</span><br><span class="line">    <span class="keyword">this</span>.items = <span class="keyword">new</span> Object[capacity];</span><br><span class="line">    lock = <span class="keyword">new</span> ReentrantLock(fair);</span><br><span class="line">    notEmpty = lock.newCondition();</span><br><span class="line">    notFull =  lock.newCondition();</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">put</span><span class="params">(E e)</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">    checkNotNull(e);</span><br><span class="line">    <span class="keyword">final</span> ReentrantLock lock = <span class="keyword">this</span>.lock;</span><br><span class="line">    lock.lockInterruptibly();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 判断是否阻塞</span></span><br><span class="line">        <span class="keyword">while</span> (count == items.length)</span><br><span class="line">            notFull.await();</span><br><span class="line">        enqueue(e);</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        lock.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">public</span> E <span class="title">take</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">    <span class="keyword">final</span> ReentrantLock lock = <span class="keyword">this</span>.lock;</span><br><span class="line">    lock.lockInterruptibly();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 判断是否阻塞</span></span><br><span class="line">        <span class="keyword">while</span> (count == <span class="number">0</span>)</span><br><span class="line">            notEmpty.await();</span><br><span class="line">        <span class="keyword">return</span> dequeue();</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        lock.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+              <a href="/blog/tags/concurrent/" rel="tag"># concurrent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/26/concurrent/chapter6/6.2_fork_join/" rel="prev" title="Fork/Join">
+      <i class="fa fa-chevron-left"></i> Fork/Join
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/05/26/concurrent/7_atomic/" rel="next" title="原子操作类">
+      原子操作类 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

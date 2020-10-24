@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Session与Cookie是Http中的一个配置项，但是其相对复杂。因为几乎所有的系统都会用到cookie，我们不得不考虑HTTP对Cookie数量和大小的限制，而Session同样存在问题，例如，分布式系统中如何共享。其他问题如：Cookie被盗、Cookie伪造等。 Session与Cookie都是为了保持用户与后端服务器的交互状态，各有优点与缺点。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="理解Session与Cookie">
+<meta property="og:url" content="https://www.effiu.cn/2020/04/14/web/10-session-and-cookie/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Session与Cookie是Http中的一个配置项，但是其相对复杂。因为几乎所有的系统都会用到cookie，我们不得不考虑HTTP对Cookie数量和大小的限制，而Session同样存在问题，例如，分布式系统中如何共享。其他问题如：Cookie被盗、Cookie伪造等。 Session与Cookie都是为了保持用户与后端服务器的交互状态，各有优点与缺点。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/58.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/59.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/60.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/61.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/62.png">
+<meta property="article:published_time" content="2020-04-14T15:54:00.000Z">
+<meta property="article:modified_time" content="2020-04-14T16:10:09.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/58.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/04/14/web/10-session-and-cookie/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>理解Session与Cookie | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E7%90%86%E8%A7%A3Cookie"><span class="nav-number">1.</span> <span class="nav-text">1. 理解Cookie</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Cookie%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B"><span class="nav-number">1.1.</span> <span class="nav-text">1. Cookie工作流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E4%BD%BF%E7%94%A8Cookie%E7%9A%84%E9%99%90%E5%88%B6"><span class="nav-number">1.2.</span> <span class="nav-text">2. 使用Cookie的限制</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E7%90%86%E8%A7%A3Seesion"><span class="nav-number">2.</span> <span class="nav-text">2. 理解Seesion</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Session%E5%92%8CCookie"><span class="nav-number">2.1.</span> <span class="nav-text">1. Session和Cookie</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Session%E5%B7%A5%E4%BD%9C%E6%A8%A1%E5%BC%8F"><span class="nav-number">2.2.</span> <span class="nav-text">2. Session工作模式</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-%E5%88%86%E5%B8%83%E5%BC%8FSession%E6%A1%86%E6%9E%B6"><span class="nav-number">3.</span> <span class="nav-text">3. 分布式Session框架</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Session%E5%92%8CCookie%E7%9A%84%E9%97%AE%E9%A2%98"><span class="nav-number">3.1.</span> <span class="nav-text">1. Session和Cookie的问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%88%86%E5%B8%83%E5%BC%8FSession%E8%A7%A3%E5%86%B3%E7%9A%84%E9%97%AE%E9%A2%98"><span class="nav-number">3.2.</span> <span class="nav-text">2. 分布式Session解决的问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E5%88%86%E5%B8%83%E5%BC%8FSession%E5%AE%9E%E7%8E%B0%E6%80%9D%E8%B7%AF"><span class="nav-number">3.3.</span> <span class="nav-text">3. 分布式Session实现思路</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Cookie%E5%8E%8B%E7%BC%A9"><span class="nav-number">4.</span> <span class="nav-text">4. Cookie压缩</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-%E5%A4%9A%E7%BB%88%E7%AB%AFSession%E7%BB%9F%E4%B8%80"><span class="nav-number">5.</span> <span class="nav-text">5. 多终端Session统一</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-%E6%80%BB%E7%BB%93"><span class="nav-number">6.</span> <span class="nav-text">6. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/04/14/web/10-session-and-cookie/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          理解Session与Cookie
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-04-14 23:54 23:54:00" itemprop="dateCreated datePublished" datetime="2020-04-14T23:54:00+08:00">2020-04-14 23:54</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-04-15 00:10 00:10:09" itemprop="dateModified" datetime="2020-04-15T00:10:09+08:00">2020-04-15 00:10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/04/14/web/10-session-and-cookie/" class="post-meta-item leancloud_visitors" data-flag-title="理解Session与Cookie" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/04/14/web/10-session-and-cookie/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/04/14/web/10-session-and-cookie/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Session与Cookie是Http中的一个配置项，但是其相对复杂。因为几乎所有的系统都会用到cookie，我们不得不考虑HTTP对Cookie数量和大小的限制，而Session同样存在问题，例如，分布式系统中如何共享。其他问题如：Cookie被盗、Cookie伪造等。</p>
+<p>Session与Cookie都是为了保持用户与后端服务器的交互状态，各有优点与缺点。</p>
+<a id="more"></a>
+
+<h2 id="1-理解Cookie"><a href="#1-理解Cookie" class="headerlink" title="1. 理解Cookie"></a>1. 理解Cookie</h2><p>当一个用户通过HTTP请求访问一个服务器时，服务器可以将一些键值对返回给客户端浏览器，还会加一些限制条件，在条件符合这个用户下次访问服务器时，数据又被完整地带回给服务器。</p>
+<p>在一个时间段内，若与用户相关的数据被频繁访问，可以针对这个数据做缓存，这样可以大大提高数据的访问性能，Cookie就是这个作用。针对同一客户端发出的请求，每次发出都会带有第一次访问时服务器端设置的信息，这样服务端就可以根据Cookie值来划分访问的用户了。</p>
+<h3 id="1-Cookie工作流程"><a href="#1-Cookie工作流程" class="headerlink" title="1. Cookie工作流程"></a>1. Cookie工作流程</h3><p><strong style='color:red'>Cookie是如何加到HTTP的header中的</strong>? 如下图所示，Tomcat是在<code>org.apache.catalina.connector.Response#generateCookieString</code>方法中将cookie构建成一个字符串的。</p>
+<p><img src="https://images.effiu.cn/blog/web/58.png" alt="Tomcat创建cookie的时序图"></p>
+<h3 id="2-使用Cookie的限制"><a href="#2-使用Cookie的限制" class="headerlink" title="2. 使用Cookie的限制"></a>2. 使用Cookie的限制</h3><p>Cookie是HTTP头中的一个字段，其本身没有限制，但是Cookie是存储在浏览器中的，不同浏览器都会Cookie的大小有限制。</p>
+<h2 id="2-理解Seesion"><a href="#2-理解Seesion" class="headerlink" title="2. 理解Seesion"></a>2. 理解Seesion</h2><p>Cookie可以让服务器端跟踪每个客户端的访问，但是每次访问都必须回传这些Cookie，增加了客户端与服务端的数据传输量，Session则可以解决这个问题。</p>
+<p>在同一个客户端每次与服务端进行交互时，不需要每次回传所有的Cookie值，只需要传回一个ID，这个ID是客户端第一次访问服务器时生成的，且具有唯一性。服务端可以根据这个ID判断用户身份等。这个ID通常是<strong>NAME</strong>为<strong>JSESSIONID</strong>的一个Cookie。</p>
+<h3 id="1-Session和Cookie"><a href="#1-Session和Cookie" class="headerlink" title="1. Session和Cookie"></a>1. Session和Cookie</h3><p>有3种设置session的方式：</p>
+<ul>
+<li>基于URL Path Parameter(JSESSIONID)，默认支持</li>
+<li>基于Cookie，若没有修改Context容器的Cookies标识，则默认也是支持的，若浏览器不支持则会将Cookie按照参数的形式拼接在url后面，传递格式:<code>servletPath;name=value</code>。同时服务也会从url中获取cookie</li>
+<li>基于SSL，默认不支持。只有<code>connector.getAttribute(&quot;SSLEnabled&quot;)</code>为<code>true</code>时才支持。</li>
+</ul>
+<p>在<code>web.xml</code>中配置<code>session-config</code>配置项，可以修改Cookie的NAME值。若是基于SSL的，则会根据<code>javax.servlet.request.ssl_session</code>属性值设置SessionID。</p>
+<h3 id="2-Session工作模式"><a href="#2-Session工作模式" class="headerlink" title="2. Session工作模式"></a>2. Session工作模式</h3><p>服务器会根据SessionID创建<code>HttpSession</code>对象。第一次是通过<code>request.getSession()</code>，该方法会将<code>HttpSession</code>加到<code>org.apache.catalina.Manager</code>的sessions容器中保存。<code>Manager</code>类管理所有Session的生命周期，Session过期将会被回收，服务器关闭，Session将被序列化到磁盘。</p>
+<p><img src="https://images.effiu.cn/blog/web/59.png" alt="png"></p>
+<p><img src="https://images.effiu.cn/blog/web/60.png" alt="Seesion工作时序图"></p>
+<p>request获取的Session对象保存在<code>org.apache.catalina.session.StandardManager</code>(实现了<code>org.apache.catalina.Manager</code>接口)中，其本质是<code>ConcurrentHashMap</code>。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">protected</span> Map&lt;String, Session&gt; sessions = <span class="keyword">new</span> ConcurrentHashMap&lt;&gt;();</span><br></pre></td></tr></table></figure>
+
+<p>我们通过<code>request.getSession(sessionId)</code>从<code>StandardManager</code>中得到Session。一个sessionId对应一个Session。</p>
+<p><code>StandardManager</code>类负责<strong>Servlet</strong>容器中所有<code>StandardSession</code>对象的生命周期管理。当<strong>Servlet</strong>容器关闭时，<code>StandardManager</code>负责持久化没有过去的<code>StandardSession</code>对象，其会将其持久化到<code>SESSIONS.ser</code>文件中。</p>
+<p><code>protected String pathname = &quot;SESSIONS.ser&quot;;</code>当Servlet容器关闭时，<code>StandardManager</code>会调用<code>unload</code>方法将集合中的StandardSession写入到<code>SESSIONS.ser</code>文件中，然后在日志启动时重新恢复。但是若要持久化保存Session对象，必须使用Servlet容器的stop命令，而不能直接kill掉进程。</p>
+<p>StandardManager管理的sessions Map集合中的StandardSession是有过期时间的，过期会被清除。Tomcat中默认是60s(<code>maxInactiveInterval</code>属性)。检查Session是否失效是在一个后台线程中完成的<code>backgroundProcess()</code>中。另外<code>request.getSession()</code>也会检查Session是否过期。</p>
+<h2 id="3-分布式Session框架"><a href="#3-分布式Session框架" class="headerlink" title="3. 分布式Session框架"></a>3. 分布式Session框架</h2><h3 id="1-Session和Cookie的问题"><a href="#1-Session和Cookie的问题" class="headerlink" title="1. Session和Cookie的问题"></a>1. Session和Cookie的问题</h3><p>Session和Cookie都有各自的优缺点。在大型互联网系统中单独使用Cookie和Session都是不行的。使用Cookie可以应对分布式部署的问题，由于Cookie将数据存储在浏览器中，所以每次访问都会将最新的值待会给处理器请求的服务器，这样也解决了在分布式服务器中不同请求到不同服务器导致的Cookie不一致的问题。</p>
+<p>使用Cookie也会带来很多问题：</p>
+<ul>
+<li>客户端Cookie存储限制，系统越多越大，Cookie的维护也越难，而且浏览器对于Cookie的存储是又限制的，超过限制会出现丢失Cookie的现象</li>
+<li>Cookie管理混乱。</li>
+<li>安全性不好。可以通过设置HttpOnly属性设置一些私密Cookie被客户端访问，但是仍然保证不了Cookie被篡改。还可以对Cookie进行加密，但是在分布式系统中维护Cookie的Key也是比较麻烦的。</li>
+</ul>
+<h3 id="2-分布式Session解决的问题"><a href="#2-分布式Session解决的问题" class="headerlink" title="2. 分布式Session解决的问题"></a>2. 分布式Session解决的问题</h3><p>结合Cookie和Session各自的优点，即分布式Session框架，可以解决很多问题：</p>
+<ul>
+<li>Session配置的统一管理</li>
+<li>Cookie使用的监控和统一规范管理</li>
+<li>Session存储的多元化</li>
+<li>Session配置的动态修改</li>
+<li>Session加密Key的定期修改</li>
+<li>Session各种存储的监控和报警支持</li>
+<li>Session框架的可扩展性</li>
+<li>跨域名Seesion与Cookie共享的问题。大型互联网系统存在多个域名的情况下，Cookie和Session共享的问题。</li>
+</ul>
+<h3 id="3-分布式Session实现思路"><a href="#3-分布式Session实现思路" class="headerlink" title="3. 分布式Session实现思路"></a>3. 分布式Session实现思路</h3><p>需要一个订阅服务器，用来让服务器订阅可写的Session项和Cookie项，这可以限制应用可以使用的Session和Cookie，甚至可以精确到Cookie的读写。这样就可以精确控制某个应用场景下的Cookie和Session的数量。</p>
+<p>通过订阅服务器推送配置可以有效地集中管理资源，所以可以省去每个应用都来配置Cookie，简化管理。比如，某个应用要使用一个新增的Cookie，则可以通过一个统一的平台来申请，申请通过才可以将这个配置项增加到订阅服务器；</p>
+<p>订阅服务器目前有很多开源的配置服务器，例如Zookeeper集群管理服务器，可以统一管理所有服务器的配置文件。</p>
+<p>Session服务器是分布式的，可以随时读取和写入。例如，Redis。</p>
+<p>分布式的Session框架，我们需要重写HttpSession的操作接口，使应用操作Session的对象与原来没有区别，这个操作需要在进入应用之前完成，例如配置一个Filter拦截用户请求。</p>
+<p>关于跨域名共享Cookie的问题，是因为Cookie是有域名限制的，在一个域名下的Cookie不能被另外一个域名访问，所以若一个用户在域名A下登陆成功，那么域名B如何保证登陆状态仍然有效呢？</p>
+<p><img src="https://images.effiu.cn/blog/web/61.png" alt="跨域名同步session"></p>
+<p>实现Session同步，需要一个跳转应用，这个应用可以被多个域名访问，主要功能是从一个域名下取得SeesionID，然后将这个SeesionID同步到另一个域名下。</p>
+<p>关键是将一个SeesionID作为Cookie写入到两个域名下。</p>
+<p>我们还可以设置一个Session签名，当用户登陆成功后根据用户私密信息生成一个签名以表示当前这个唯一的合法登陆状态。然后把这个签名作为一个Cookie保存在当前用户的浏览器中。用户每次访问服务器都会检查这个签名和从服务器分布式缓存中取得的Session重新生成的签名是否一致。</p>
+<h2 id="4-Cookie压缩"><a href="#4-Cookie压缩" class="headerlink" title="4. Cookie压缩"></a>4. Cookie压缩</h2><p>若Cookie的量非常大，可以对Cookie进行压缩。压缩算法可以使用gzip和deflate算法。Header中仅支持部分ASCII码，将Cookie压缩后再进行转码。</p>
+<h2 id="5-多终端Session统一"><a href="#5-多终端Session统一" class="headerlink" title="5. 多终端Session统一"></a>5. 多终端Session统一</h2><p>目前很多互联网企业都支持多终端，PC端和移动端等。例如，同时访问手机端和PC端；在手机上访问PC端网站等问题，所以我们需要做到Session的统一。</p>
+<p>目前很流行的是手机端扫描PC端二维码进行登录。其实现流程是：</p>
+<p><img src="https://images.effiu.cn/blog/web/62.png" alt="多终端登录"></p>
+<p>手机在扫码之前就已经是登录状态，当用户扫码后，手机端根据二维码请求服务器并带有一个特殊标识，标识用户通过手机端登录，PC端通过心跳请求发送到服务器，验证是否已经登录成功，若已经登录成功就可以获取对应的SessionID等登录信息。</p>
+<h2 id="6-总结"><a href="#6-总结" class="headerlink" title="6. 总结"></a>6. 总结</h2><p>Cookie和Session都是为了保持用户访问的连续状态，这是为了方便业务实现，也是为了简化服务端的设计，提高性能。同时也需要解决Session的同步问题，跨域名Session同步问题等。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/12/web/9-servlet/" rel="prev" title="Servlet工作原理">
+      <i class="fa fa-chevron-left"></i> Servlet工作原理
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/15/web/11-Tomcat/" rel="next" title="Tomcat的系统架构与设计模式">
+      Tomcat的系统架构与设计模式 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

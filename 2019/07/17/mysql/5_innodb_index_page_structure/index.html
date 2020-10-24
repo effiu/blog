@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="页是InnoDB管理存储空间的基本单位，大小为16KB，InnoDB为了不同目的设计了多种类型的页：  存放表中记录数据的页(索引，INDEX页) 存放表空间头部信息的页 存放Insert Buffer信息的页 存放INODE信息的页 存放undo日志信息的页 ······  下面说明INDEX页数据结构。 具体见下文">
+<meta property="og:type" content="article">
+<meta property="og:title" content="InnoDB INDEX 页结构">
+<meta property="og:url" content="https://www.effiu.cn/2019/07/17/mysql/5_innodb_index_page_structure/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="页是InnoDB管理存储空间的基本单位，大小为16KB，InnoDB为了不同目的设计了多种类型的页：  存放表中记录数据的页(索引，INDEX页) 存放表空间头部信息的页 存放Insert Buffer信息的页 存放INODE信息的页 存放undo日志信息的页 ······  下面说明INDEX页数据结构。 具体见下文">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/6.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/7.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/4.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/09.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/11.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/12.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/14.png">
+<meta property="article:published_time" content="2019-07-17T10:02:00.000Z">
+<meta property="article:modified_time" content="2020-06-10T16:14:41.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="MySQL">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/mysql/6.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/07/17/mysql/5_innodb_index_page_structure/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>InnoDB INDEX 页结构 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E6%95%B0%E6%8D%AE%E9%A1%B5%E7%BB%93%E6%9E%84%E6%A6%82%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">1. 数据页结构概述</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E8%AE%B0%E5%BD%95%E5%9C%A8%E9%A1%B5%E4%B8%AD%E5%AD%98%E5%82%A8"><span class="nav-number">2.</span> <span class="nav-text">2. 记录在页中存储</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E8%AE%B0%E5%BD%95%E5%A4%B4%E4%BF%A1%E6%81%AF"><span class="nav-number">2.1.</span> <span class="nav-text">1. 记录头信息</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-Page-Directory-%E9%A1%B5%E7%9B%AE%E5%BD%95"><span class="nav-number">3.</span> <span class="nav-text">2. Page Directory(页目录)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-Page-Header-%E9%A1%B5%E5%A4%B4%E9%83%A8"><span class="nav-number">4.</span> <span class="nav-text">3. Page Header(页头部)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-File-Header-%E6%96%87%E4%BB%B6%E5%A4%B4%E9%83%A8"><span class="nav-number">5.</span> <span class="nav-text">3. File Header(文件头部)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-File-Trailer"><span class="nav-number">6.</span> <span class="nav-text">4. File Trailer</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/07/17/mysql/5_innodb_index_page_structure/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          InnoDB INDEX 页结构
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-07-17 18:02 18:02:00" itemprop="dateCreated datePublished" datetime="2019-07-17T18:02:00+08:00">2019-07-17 18:02</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-06-11 00:14 00:14:41" itemprop="dateModified" datetime="2020-06-11T00:14:41+08:00">2020-06-11 00:14</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/mysql/" itemprop="url" rel="index"><span itemprop="name">mysql</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/07/17/mysql/5_innodb_index_page_structure/" class="post-meta-item leancloud_visitors" data-flag-title="InnoDB INDEX 页结构" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/07/17/mysql/5_innodb_index_page_structure/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/07/17/mysql/5_innodb_index_page_structure/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>页</strong>是<code>InnoDB</code>管理存储空间的基本单位，大小为<code>16KB</code>，<code>InnoDB</code>为了不同目的设计了多种类型的<strong>页</strong>：</p>
+<ul>
+<li>存放表中记录数据的页(索引，<code>INDEX</code>页)</li>
+<li>存放表空间头部信息的页</li>
+<li>存放<code>Insert Buffer</code>信息的页</li>
+<li>存放<code>INODE</code>信息的页</li>
+<li>存放<code>undo</code>日志信息的页</li>
+<li>······</li>
+</ul>
+<p>下面说明<code>INDEX</code>页数据结构。</p>
+<p>具体见<a href="/blog/2019/07/17/mysql/5_innodb_index_page_structure#pageType">下文</a></p>
+<a id="more"></a>
+
+<h5 id="1-数据页结构概述"><a href="#1-数据页结构概述" class="headerlink" title="1. 数据页结构概述"></a>1. 数据页结构概述</h5><p><img src="https://images.effiu.cn/blog/mysql/6.png" alt="数据页结构">&gt;</p>
+<blockquote>
+<p>上图中可以看出，一个<code>InnoDB</code>数据页存储空间大致被划分为7部分，具体描述：</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>中文名</th>
+<th>占用空间</th>
+<th>简单描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>File Header</code></td>
+<td>文件头部</td>
+<td>38字节</td>
+<td>页的通用信息</td>
+</tr>
+<tr>
+<td><code>Page Header</code></td>
+<td>页面头部</td>
+<td>56字节</td>
+<td>数据页专有信息</td>
+</tr>
+<tr>
+<td><code>Infimum + Supermum</code></td>
+<td>最小记录和最大记录</td>
+<td>26字节</td>
+<td>两个虚拟的行记录</td>
+</tr>
+<tr>
+<td><code>User Records</code></td>
+<td>用户记录</td>
+<td>不确定</td>
+<td>实际存储的行记录内容</td>
+</tr>
+<tr>
+<td><code>Free Space</code></td>
+<td>空闲空间</td>
+<td>不确定</td>
+<td>页中尚未使用的空间</td>
+</tr>
+<tr>
+<td><code>Page Directory</code></td>
+<td>页面目录</td>
+<td>不确定</td>
+<td>页中某些记录的相对位置</td>
+</tr>
+<tr>
+<td><code>File Trailer</code></td>
+<td>文件尾部</td>
+<td>8字节</td>
+<td>校验页是否完整</td>
+</tr>
+</tbody></table>
+<h5 id="2-记录在页中存储"><a href="#2-记录在页中存储" class="headerlink" title="2. 记录在页中存储"></a>2. 记录在页中存储</h5><p>真实的数据是存储到<code>User Records</code>中的，当我们插入一条记录时，就会从<code>Free Space</code>中申请一个记录大小的空间划分到<code>User Records</code>中。当<code>Free Space</code>被用完后，继续插入记录就会去申请新的页。如下图:</p>
+<p><img src="https://images.effiu.cn/blog/mysql/7.png" alt="数据存储过程"></p>
+<blockquote>
+<p>为了更好管理在<code>User Records</code>中的记录，<code>InnoDB</code>做了好多。</p>
+</blockquote>
+<h6 id="1-记录头信息"><a href="#1-记录头信息" class="headerlink" title="1. 记录头信息"></a>1. 记录头信息</h6><blockquote>
+<p>记录头信息如下:</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/blog/mysql/4.png" alt="记录头信息"></p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th align="center">大小(bit)</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>预留位1/2</td>
+<td align="center">1</td>
+<td>未被使用</td>
+</tr>
+<tr>
+<td><code>delete_mask</code></td>
+<td align="center">1</td>
+<td>标记该记录是否被删除</td>
+</tr>
+<tr>
+<td><code>min_rec_mask</code></td>
+<td align="center">1</td>
+<td>B+树的每层非叶子节点中最小记录都会添加该标记</td>
+</tr>
+<tr>
+<td><code>n_owned</code></td>
+<td align="center">4</td>
+<td>表示当前记录拥有的记录数</td>
+</tr>
+<tr>
+<td><code>heap_no</code></td>
+<td align="center">13</td>
+<td>表示当前记录在记录堆中的位置信息</td>
+</tr>
+<tr>
+<td><code>record_type</code></td>
+<td align="center">3</td>
+<td>记录的类型,0:普通记录;1:B+树非叶子节点记录;2:最小记录;3:最大记录</td>
+</tr>
+<tr>
+<td><code>next_record</code></td>
+<td align="center">16</td>
+<td>下一条记录的相对位置</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>建表，插入数据</p>
+</blockquote>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">CREATE TABLE page_demo(</span><br><span class="line">          c1 INT,</span><br><span class="line">          c2 INT,</span><br><span class="line">          c3 VARCHAR(10000),</span><br><span class="line">          PRIMARY KEY (c1)</span><br><span class="line">      ) CHARSET&#x3D;ascii ROW_FORMAT&#x3D;Compact;</span><br><span class="line">INSERT INTO page_demo VALUES(1, 100, &#39;aaaa&#39;), (2, 200, &#39;bbbb&#39;), (3, 300, &#39;cccc&#39;), (4, 400, &#39;dddd&#39;);</span><br></pre></td></tr></table></figure>
+
+<p>其在<code>User Records</code>里如下：</p>
+<p><img src="https://images.effiu.cn/blog/mysql/09.png" alt="数据排列"></p>
+<blockquote>
+<p>上述只展示了记录头信息和实际列数据信息。</p>
+</blockquote>
+<ul>
+<li><p><code>delete_mask</code>：表示该记录是否被删除，占用1个二进制位，<code>0</code>代表未删除，<code>1</code>表示已删除</p>
+<p>记录被删除后仍然在<code>页</code>中，是因为立即删除把其他记录重新排列需要性能消耗，所以只是打一个删除标记，且所有被删除的记录都会组成一个<strong>垃圾链表</strong>，这个链表中记录占用的空间是<strong>可重用空间</strong>。</p>
+<blockquote>
+<p>如果有新记录插入，可能会把被删除的记录占用的存储空间覆盖掉，但是如果有与带删除标识记录一样的数据，还会插入到原位置</p>
+</blockquote>
+</li>
+<li><p><code>min_rec_mask</code>：B+树每层非叶子节点中最小记录都会添加改标记</p>
+</li>
+<li><p><code>n_owned</code></p>
+</li>
+<li><p><code>heap_no</code>：上图可知，当前记录在本页中的位置，从<code>2</code>开始，0和1已被<code>Infimum</code>、<code>Supermum</code>即最小记录和最大记录占用。</p>
+<p><img src="https://images.effiu.cn/blog/mysql/11.png" alt="Infimumh和Supermum"></p>
+<p>由于<code>Infimum</code>、<code>Supermum</code>是<code>MySQL</code>定义的记录，所以单独存储。</p>
+</li>
+<li><p><code>record_type</code>：表示当前记录的类型，共有4种类型</p>
+<ul>
+<li>0：普通记录</li>
+<li>1：B+树非叶子节点记录</li>
+<li>2：最小记录</li>
+<li>3：最大记录</li>
+</ul>
+</li>
+<li><p><code>next_record</code>：表示从当前记录真实数据的地方到<strong>下一条记录</strong>真实数据的<font color='red'>地址偏移量（向左读取就是记录头信息，向右读取就是真实数据，且NULL值列表，变长字段长度列表是逆序）</font>，实际是<strong>链表</strong>。下一条记录并不是指插入顺序的下一条记录，而是按照主键值由小到大顺序的下一条记录。规定<code>Infimum</code>（最小记录）的下一条记录就是本页中主键最小的记录，本页中主键最大的记录的下一条记录就是<code>Supermum</code>。见下图:</p>
+<p><img src="https://images.effiu.cn/blog/mysql/12.png" alt="数据记录链表"></p>
+<p>当我们删除记录时，链表页会变动：</p>
+<ul>
+<li>把该条记录的<code>delete_mask</code>置为1</li>
+<li>该记录的<code>next_record</code>指向0</li>
+<li>上一条记录的<code>next_record</code>指向下一条记录</li>
+<li><code>n_owned</code>值减1</li>
+</ul>
+</li>
+</ul>
+<h5 id="2-Page-Directory-页目录"><a href="#2-Page-Directory-页目录" class="headerlink" title="2. Page Directory(页目录)"></a>2. Page Directory(页目录)</h5><p><code>InnoDB</code>为记录制作了一个目录：</p>
+<ul>
+<li><p>将页中所有正常的记录（包括最大、最小，不包括带删除标识的记录）划分为几组</p>
+</li>
+<li><p>每组的最后一条记录（组内最大的那条记录）的头信息中的<code>n_owned</code>属性表示改组拥有的记录数</p>
+</li>
+<li><p>将每组记录的最后一条记录的地址偏移量单独取出来按照顺序存储到靠近<strong>页</strong>尾部的地方，即<code>Page Directory</code>。页目录中这些地址偏移量称为<strong>Slot</strong>(称为槽)</p>
+<p>假如，<code>page_demo</code>表中正常的记录有4条，那么<code>InnoDB</code>会把记录分成两组</p>
+<ul>
+<li>第一组只有最小记录(<code>Infimum</code>)，<strong>槽0</strong>记录最小地址偏移量，槽0的<code>n_owned</code>为1，说明该分组中只有1条记录</li>
+<li>第二组4条真实数据 + 最大记录(<code>Supermum</code>)，<strong>槽1</strong>记录最大地址偏移量</li>
+</ul>
+<p><img src="https://images.effiu.cn/blog/mysql/14.png" alt="页分组"></p>
+</li>
+</ul>
+<p>分组要求：</p>
+<ul>
+<li>最小记录所在分组只能由1条记录，即其本身</li>
+<li>最大记录所在分组拥有的记录数在<code>1~8</code>之间</li>
+<li>剩余分组记录数在<code>4~8</code>之间</li>
+</ul>
+<p>分组规则：</p>
+<ul>
+<li>初始情况下一个数据页里只有最小记录和最大记录两条记录，它们分属于两个分组</li>
+<li>每插入一条记录，都会从<code>Page Directory</code>中找出主键值与记录主键差值最小的槽，把该槽对应记录<code>n_owned</code>+1直到等于8</li>
+<li>当组中记录数等于8时，继续插入会将该组拆分为两组，一组4条，一组5条，同时新增一个槽记录并记录新增组中最大的那条记录偏移量以及更新原有槽<code>n_owned</code>以及槽内偏移量</li>
+</ul>
+<p>当我们从记录中查找数据时：</p>
+<ul>
+<li>通过二分法确定该记录所在的槽，并找到该槽中主键值最小的那条记录</li>
+<li>通过记录的<code>next_record</code>遍历组内各个记录</li>
+</ul>
+<h5 id="3-Page-Header-页头部"><a href="#3-Page-Header-页头部" class="headerlink" title="3. Page Header(页头部)"></a>3. Page Header(页头部)</h5><p><strong>页</strong>的第二部分，固定<code>56</code>个字节，专门存储各种状态信息，具体如下：</p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th align="center">bit</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>PAGE_N_DIR_SLOTS</code></td>
+<td align="center">2</td>
+<td>页目录中的槽数量</td>
+</tr>
+<tr>
+<td><code>PAGE_HEAP_TOP</code></td>
+<td align="center">2</td>
+<td>未使用空间最小地址，<code>Free Space</code>起始地址</td>
+</tr>
+<tr>
+<td><code>PAGE_N_HEAP</code></td>
+<td align="center">2</td>
+<td>本页中记录的数量(包括，最大、最小、带删除标识的记录)</td>
+</tr>
+<tr>
+<td><code>PAGE_FREE</code></td>
+<td align="center">2</td>
+<td>第一个标记为删除的记录地址(删除链表的起始位置，<code>next_record</code>记录下一个带删除标识的记录)</td>
+</tr>
+<tr>
+<td><code>PAGE_GARBAGE</code></td>
+<td align="center">2</td>
+<td>已删除记录占用字节数</td>
+</tr>
+<tr>
+<td><code>PAGE_DIRECTION</code></td>
+<td align="center">2</td>
+<td>记录插入的方向</td>
+</tr>
+<tr>
+<td><code>PAGE_N_DIRECTION</code></td>
+<td align="center">2</td>
+<td>一个方向连续插入的记录数量</td>
+</tr>
+<tr>
+<td><code>PAGE_N_RECS</code></td>
+<td align="center">2</td>
+<td>该页中记录的数量(不包括最大、最小、带删除标记的记录)</td>
+</tr>
+<tr>
+<td><code>PAGE_MAX_TRX_ID</code></td>
+<td align="center">8</td>
+<td>当前页最大事务ID，仅在二级索引中定义</td>
+</tr>
+<tr>
+<td><code>PAGE_LEVEL</code></td>
+<td align="center">2</td>
+<td>当前页在B+树种所处的层级</td>
+</tr>
+<tr>
+<td><code>PAGE_INDEX_ID</code></td>
+<td align="center">8</td>
+<td>索引ID，当前页属于哪个索引</td>
+</tr>
+<tr>
+<td><code>PAGE_BTR_SEG_LEAF</code></td>
+<td align="center">10</td>
+<td>B+树叶子端头部信息，仅在B+树的Root页定义</td>
+</tr>
+<tr>
+<td><code>PAGE_BTR_SEG_TOP</code></td>
+<td align="center">10</td>
+<td>B+树叶非子端头部信息，仅在B+树的Root页定义</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>部分解释如下：</p>
+</blockquote>
+<ul>
+<li><code>PAGE_DIRECTION</code>，假如新插入的记录主键值比上一条大，则是向右插入，<code>PAGE_DIRECTION</code>用来记录插入方向。</li>
+<li><code>PAGE_N_DIRECTION</code>，连续插入记录的方向是一致，则<code>PAGE_DIRECTION</code>为插入条数。方向改变则该值被清零</li>
+</ul>
+<h5 id="3-File-Header-文件头部"><a href="#3-File-Header-文件头部" class="headerlink" title="3. File Header(文件头部)"></a>3. File Header(文件头部)</h5><p><code>Page Header</code>是专门针对<code>Index</code>页记录的各种状态信息，<code>File Header</code>是针对各种类型的页。各种页都会以<code>File Header</code>为第一部分，描述了一些针对各种页的通用信息。如下：</p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th align="center">bit</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>FIL_PAGE_SPACE_OR_CHKSUM</code></td>
+<td align="center">4</td>
+<td>页的校验和(checkSum值)</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_OFFSET</code></td>
+<td align="center">4</td>
+<td>页号</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_PREV</code></td>
+<td align="center">4</td>
+<td>上一页页号</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_NEXT</code></td>
+<td align="center">4</td>
+<td>下一页页号</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_LSN</code></td>
+<td align="center">8</td>
+<td>页面被最后修改时对应的日志序列位置</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_TYPE</code></td>
+<td align="center">2</td>
+<td>页类型</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_FILE_FLUSH_LSN</code></td>
+<td align="center">8</td>
+<td>仅仅在系统表空间的一个页中定义，代表文件至少被刷新到了对应的LSN值，(<code>LSN</code>，Log Sequence Number)</td>
+</tr>
+<tr>
+<td><code>FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID</code></td>
+<td align="center">4</td>
+<td>页属于哪个表空间</td>
+</tr>
+</tbody></table>
+<ul>
+<li><p><code>FIL_PAGE_SPACE_OR_CHKSUM</code>：通过某种算法来计算一个比较短的值来代表这个很长的字节串，这个比较短的值就称为校验和。</p>
+</li>
+<li><p><code>FIL_PAGE_OFFSET</code>：页号</p>
+</li>
+<li><p><code>FIL_PAGE_TYPE</code>：当前页类型<a name="pageType"></a></p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th align="center">类型名称</th>
+<th align="center">十六进制</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center"><code>FIL_PAGE_TYPE_ALLOCATED</code></td>
+<td align="center">0x0000</td>
+<td align="center">最新分配，还没使用</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_UNDO_LOG</code></td>
+<td align="center">0x0002</td>
+<td align="center">Undo日志页</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_INODE</code></td>
+<td align="center">0x0003</td>
+<td align="center">段信息节点</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_IBUF_FREE_LIST</code></td>
+<td align="center">0x0004</td>
+<td align="center">Insert Buffer空闲列表</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_IBUF_BITMAP</code></td>
+<td align="center">0x0005</td>
+<td align="center">Insert Buffer位图</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_TYPE_SYS</code></td>
+<td align="center">0x0006</td>
+<td align="center">系统页</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_TYPE_TRX_SYS</code></td>
+<td align="center">0x0007</td>
+<td align="center">事务系统数据</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_TYPE_FSP_HDR</code></td>
+<td align="center">0x0008</td>
+<td align="center">表空间头部信息</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_TYPE_XDES</code></td>
+<td align="center">0x0009</td>
+<td align="center">扩展描述页</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_TYPE_BLOB</code></td>
+<td align="center">0x000A</td>
+<td align="center">BLOB页</td>
+</tr>
+<tr>
+<td align="center"><code>FIL_PAGE_INDEX</code></td>
+<td align="center">0x45BF</td>
+<td align="center">索引页，也就是我们所说的数据页</td>
+</tr>
+</tbody></table>
+<ul>
+<li><code>FIL_PAGE_PREV</code>和<code>FIL_PAGE_NEXT</code>，<code>InnoDB</code>中是以页为单位存储数据，当我们存储的数据占用的空间非常大时，<code>InnoDB</code>不可能有连续的存储空间，所以如果分散到多个不连续的空间时，就需要把页关联起来。<code>FIL_PAGE_PREV</code>和<code>FIL_PAGE_NEXT</code>就是上一页与下一页的页号，即是一个双向链表。并不是所有类型的页都有这两个属性。</li>
+</ul>
+<h5 id="4-File-Trailer"><a href="#4-File-Trailer" class="headerlink" title="4. File Trailer"></a>4. File Trailer</h5><p>用于检测一个页是否完整，由8个字节组成</p>
+<ul>
+<li>前4个字节代表页的校验和。当页的记录被修改了，同步到库之前就需要计算该页的校验和，因为<code>File Heaer</code>在页的前面，所以校验和会先被同步到磁盘，完全写完后也会被写到页的尾部，当完全同步成功时，则<code>File Header</code>和<code>File Trailer</code>内的校验和一致，否则代表同步过程出错。例如，写入到磁盘一半断电。</li>
+<li>后4个字节代表页面被最后修改时对应的日志序列位置(<code>LSN</code>，Log Sequence Number)</li>
+</ul>
+<h5 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h5><ol>
+<li>InnoDB为了不同的目的而设计了不同类型的页，我们把用于存放记录的页叫做<code>Index</code>页。</li>
+<li>一个数据页分为7个部分：<ul>
+<li><code>File Header</code>，文件头部，38个字节，描述页的通用信息</li>
+<li><code>Page Header</code>，页头部，56个字节，数据页专有信息</li>
+<li><code>Infimum + Supermum</code>，最大记录和最小记录（虚拟记录或者位记录），26个字节</li>
+<li><code>User Records</code>，真实数据，大小不固定，存储真实数据</li>
+<li><code>Free Space</code>，空闲空间，大小不确定，页中尚未使用的部分</li>
+<li><code>Page Directory</code>，页中某些记录的相对位置，即各个槽在页中的地址偏移量，大小不固定</li>
+<li><code>File Trailer</code>，用于检验页是否完整的部分，占用固定的8个字节。</li>
+</ul>
+</li>
+<li>每个记录的头信息中都有一个<code>next_record</code>属性，从而使页中的所有记录串联成一个<code>单链表</code>。</li>
+<li><code>InnoDB</code>会为把页中的记录划分为若干个组，每个组的最后一个记录的地址偏移量作为一个<code>槽</code>，存放在<code>Page Directory</code>中，所以在一个页中根据主键查找记录是非常快的，分为两步：<ul>
+<li>通过二分法确定该记录所在的槽。</li>
+<li>通过记录的next_record属性遍历该槽所在的组中的各个记录。</li>
+</ul>
+</li>
+<li>每个数据页的<code>File Header</code>部分都有上一个和下一个页的编号，所以所有的数据页会组成一个<code>双链表</code>。</li>
+<li>为保证从内存中同步到磁盘的页的完整性，在页的首部和尾部都会存储页中数据的校验和和页面最后修改时对应的<code>LSN</code>值，如果首部和尾部的校验和和<code>LSN</code>值校验不成功的话，就说明同步过程出现了问题。</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/MySQL/" rel="tag"># MySQL</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/16/mysql/4_innodb_data_structure/" rel="prev" title="InnoDB数据结构">
+      <i class="fa fa-chevron-left"></i> InnoDB数据结构
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/19/mysql/6_b+_tree_index/" rel="next" title="B+ Tree Index">
+      B+ Tree Index <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

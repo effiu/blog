@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="常用的消息队列中间件是RabbitMQ、Kafka、RocketMQ等，给应用程序之间增加异步消息传递功能。Redis也可以实现基本的消息队列，其没有太多高级特性，没有ack保证，但是也能满足大部分业务需求。  平时开发过程中，会有一些bool型数据需要存取，比如用户的签到记录，签到为1，不签到为0，要记录365天，若使用普通的key&#x2F;value，浪费存储空间。Redis提供了位图数据结构，每天">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis延时队列和位图">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/20/redis/3_delay_queue_bit/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="常用的消息队列中间件是RabbitMQ、Kafka、RocketMQ等，给应用程序之间增加异步消息传递功能。Redis也可以实现基本的消息队列，其没有太多高级特性，没有ack保证，但是也能满足大部分业务需求。  平时开发过程中，会有一些bool型数据需要存取，比如用户的签到记录，签到为1，不签到为0，要记录365天，若使用普通的key&#x2F;value，浪费存储空间。Redis提供了位图数据结构，每天">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/07.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/08.png">
+<meta property="article:published_time" content="2019-08-20T15:16:00.000Z">
+<meta property="article:modified_time" content="2019-08-22T13:53:40.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/redis/07.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/20/redis/3_delay_queue_bit/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Redis延时队列和位图 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E5%BC%82%E6%AD%A5%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97"><span class="nav-number">1.</span> <span class="nav-text">1. 异步消息队列</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%94%81%E5%86%B2%E7%AA%81%E5%A4%84%E7%90%86"><span class="nav-number">1.1.</span> <span class="nav-text">锁冲突处理</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%98%9F%E5%88%97%E5%BB%B6%E6%97%B6%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.2.</span> <span class="nav-text">队列延时的实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BC%98%E5%8C%96%E6%96%B9%E5%90%91"><span class="nav-number">1.3.</span> <span class="nav-text">优化方向</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E4%BD%8D%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">2. 位图</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E5%9F%BA%E6%9C%AC%E4%BD%BF%E7%94%A8"><span class="nav-number">2.1.</span> <span class="nav-text">1. 基本使用</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E7%BB%9F%E8%AE%A1%E5%92%8C%E6%9F%A5%E6%89%BE"><span class="nav-number">2.2.</span> <span class="nav-text">2. 统计和查找</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E9%AD%94%E6%9C%AF%E6%8C%87%E4%BB%A4bitfield"><span class="nav-number">2.3.</span> <span class="nav-text">3. 魔术指令bitfield</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/20/redis/3_delay_queue_bit/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Redis延时队列和位图
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-20 23:16 23:16:00" itemprop="dateCreated datePublished" datetime="2019-08-20T23:16:00+08:00">2019-08-20 23:16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-22 21:53 21:53:40" itemprop="dateModified" datetime="2019-08-22T21:53:40+08:00">2019-08-22 21:53</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/20/redis/3_delay_queue_bit/" class="post-meta-item leancloud_visitors" data-flag-title="Redis延时队列和位图" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/20/redis/3_delay_queue_bit/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/20/redis/3_delay_queue_bit/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>5 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <ul>
+<li><p>常用的消息队列中间件是RabbitMQ、Kafka、RocketMQ等，给应用程序之间增加异步消息传递功能。Redis也可以实现基本的消息队列，其没有太多高级特性，没有ack保证，但是也能满足大部分业务需求。</p>
+</li>
+<li><p>平时开发过程中，会有一些<code>bool</code>型数据需要存取，比如用户的签到记录，签到为1，不签到为0，要记录365天，若使用普通的key/value，浪费存储空间。Redis提供了<strong>位图</strong>数据结构，每天只占据1个位，这样可以大大节省存储空间。</p>
+</li>
+</ul>
+<a id="more"></a>
+
+<h3 id="1-异步消息队列"><a href="#1-异步消息队列" class="headerlink" title="1. 异步消息队列"></a>1. 异步消息队列</h3><p>Redis的list数据结构常用来作为异步消息队列使用，<code>rpush</code>/<code>lpush</code>操作入队列，<code>lpop</code>/<code>rpop</code>出队列</p>
+<p><img src="https://images.effiu.cn/blog/redis/07.png" alt="消息队列"></p>
+<p>客户端通过<code>lpop</code>和<code>rpop</code>操作获取消息，然后进行处理。处理完了继续获取消息，在进行处理。这就是客户端作为队列消费者的客户端声明周期。</p>
+<ol>
+<li><p>若队列空了，就会陷入<code>pop</code>死循环，非常浪费资源(拉高了客户端的CPU，Redis的QPS也会被拉高)。所有使用<code>sleep</code>解决问题。<code>Thread.sleep(1000)</code></p>
+</li>
+<li><p>睡眠会导致消息延迟增大。<code>blpop</code>/<code>brpop</code>，<strong>阻塞读</strong>可以解决问题。阻塞读在队列没有数据的时候，会立即进入休眠状态，一旦数据到来，则立刻唤醒，消息延迟位0。</p>
+</li>
+<li><p>使用<code>blpop</code>/<code>brpop</code>仍然不完美，空闲连接问题。其会造成线程一直被阻塞，产生Redis空闲连接，闲置过久，服务器会主动断开连接，减少资源占用，这时<code>blpop</code>/<code>brpop</code>还会抛出异常。</p>
+</li>
+</ol>
+<h4 id="锁冲突处理"><a href="#锁冲突处理" class="headerlink" title="锁冲突处理"></a>锁冲突处理</h4><p><a name='#timeout'></a>分布式锁中客户端在处理请求时加锁失败如何解决：</p>
+<ul>
+<li>直接抛出异常，通知用户稍后重试。适合由用户直接发起的请求，从弹出错误到用户重试有个缓冲时间，考虑到用户体验，还可以由后台代替进行延迟重试控制。本质上是对当前请求的放弃，由用户决定是否发起新的请求。</li>
+<li>sleep，一会重试。sleep会阻塞当前线程，会导致队列的后续消息出现延迟。若碰撞比较频繁或者队列里消息过多，不建议使用sleep。若出现加锁失败的线程，还会导致线程堵死。</li>
+<li>将请求转移至延时队列，一会重试。比较适合异步消息处理，将当前冲突的请求扔到另一个队列延后处理以避开冲突。</li>
+</ul>
+<h4 id="队列延时的实现"><a href="#队列延时的实现" class="headerlink" title="队列延时的实现"></a>队列延时的实现</h4><p>延时队列可以通过Redis的zset实现，将消息序列化为一个字符串做为zset的<code>value</code>，消息的到期处理时间作为score，然后轮询获取到期的任务进行处理。若要为了保障程序的可用型，则使用多线程轮询，但同时也要考虑并发争抢任务，确保任务不能被多执行。Java代码如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> java.lang.reflect.Type;</span><br><span class="line"><span class="keyword">import</span> java.util.Set;</span><br><span class="line"><span class="keyword">import</span> java.util.UUID;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.JSON;</span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.TypeReference;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> redis.clients.jedis.Jedis;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RedisDelayingQueue</span>&lt;<span class="title">T</span>&gt; </span>&#123;</span><br><span class="line">	<span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">TaskItem</span>&lt;<span class="title">T</span>&gt; </span>&#123;</span><br><span class="line">    	<span class="keyword">public</span> String id;</span><br><span class="line">    	<span class="keyword">public</span> T msg;</span><br><span class="line">  	&#125;</span><br><span class="line"></span><br><span class="line">  	<span class="comment">// fastjson 序列化对象中存在 generic 类型时，需要使用 TypeReference</span></span><br><span class="line">  	<span class="keyword">private</span> Type TaskType = <span class="keyword">new</span> TypeReference&lt;TaskItem&lt;T&gt;&gt;() &#123;&#125;.getType();</span><br><span class="line"></span><br><span class="line">  	<span class="keyword">private</span> Jedis jedis;</span><br><span class="line">  	<span class="keyword">private</span> String queueKey;</span><br><span class="line"></span><br><span class="line">  	<span class="function"><span class="keyword">public</span> <span class="title">RedisDelayingQueue</span><span class="params">(Jedis jedis, String queueKey)</span> </span>&#123;</span><br><span class="line">    	<span class="keyword">this</span>.jedis = jedis;</span><br><span class="line">    	<span class="keyword">this</span>.queueKey = queueKey;</span><br><span class="line">  	&#125;</span><br><span class="line"></span><br><span class="line">  	<span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">delay</span><span class="params">(T msg)</span> </span>&#123;</span><br><span class="line">    	TaskItem&lt;T&gt; task = <span class="keyword">new</span> TaskItem&lt;T&gt;();</span><br><span class="line">    	task.id = UUID.randomUUID().toString(); <span class="comment">// 分配唯一的 uuid</span></span><br><span class="line">    	task.msg = msg;</span><br><span class="line">    	String s = JSON.toJSONString(task); <span class="comment">// fastjson 序列化</span></span><br><span class="line">    	jedis.zadd(queueKey, System.currentTimeMillis() + <span class="number">5000</span>, s); <span class="comment">// 塞入延时队列 ,5s 后再试</span></span><br><span class="line">  	&#125;</span><br><span class="line"></span><br><span class="line">  	<span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">loop</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    	<span class="comment">// 轮询获取到期任务</span></span><br><span class="line">    	<span class="keyword">while</span> (!Thread.interrupted()) &#123;</span><br><span class="line">      		<span class="comment">// 只取一条。zrangeByScore()获取指定(0, System.currentTimeMillis())，即到期的任务。</span></span><br><span class="line">      		Set&lt;String&gt; values = jedis.zrangeByScore(queueKey, <span class="number">0</span>, System.currentTimeMillis(), <span class="number">0</span>, <span class="number">1</span>);</span><br><span class="line">      		<span class="keyword">if</span> (values.isEmpty()) &#123;</span><br><span class="line">        		<span class="keyword">try</span> &#123;</span><br><span class="line">          			Thread.sleep(<span class="number">500</span>); <span class="comment">// 歇会继续</span></span><br><span class="line">        		&#125; <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">          			<span class="keyword">break</span>;</span><br><span class="line">        		&#125;</span><br><span class="line">       			<span class="keyword">continue</span>;</span><br><span class="line">      		&#125;</span><br><span class="line">      		String s = values.iterator().next();</span><br><span class="line">            <span class="comment">// zrem争抢消费任务</span></span><br><span class="line">      		<span class="keyword">if</span> (jedis.zrem(queueKey, s) &gt; <span class="number">0</span>) &#123; <span class="comment">// 抢到了</span></span><br><span class="line">            	TaskItem&lt;T&gt; task = JSON.parseObject(s, TaskType); <span class="comment">// fastjson 反序列化</span></span><br><span class="line">        		<span class="comment">// 任务处理</span></span><br><span class="line">          		<span class="keyword">this</span>.handleMsg(task.msg);</span><br><span class="line">      		&#125;</span><br><span class="line">    	&#125;</span><br><span class="line">  	&#125;</span><br><span class="line">	<span class="comment">// 任务处理，应该捕获异常，防止单个任务异常导致的消费任务线程退出</span></span><br><span class="line">  	<span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">handleMsg</span><span class="params">(T msg)</span> </span>&#123;</span><br><span class="line">    	System.out.println(msg);</span><br><span class="line">  	&#125;</span><br><span class="line"></span><br><span class="line">  	<span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">    	Jedis jedis = <span class="keyword">new</span> Jedis();</span><br><span class="line">    	RedisDelayingQueue&lt;String&gt; queue = <span class="keyword">new</span> RedisDelayingQueue&lt;&gt;(jedis, <span class="string">&quot;q-demo&quot;</span>);</span><br><span class="line">    	Thread producer = <span class="keyword">new</span> Thread() &#123;</span><br><span class="line"></span><br><span class="line">      		<span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        		<span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; i++) &#123;</span><br><span class="line">        	  		queue.delay(<span class="string">&quot;codehole&quot;</span> + i);</span><br><span class="line">        		&#125;</span><br><span class="line">      		&#125;</span><br><span class="line">    	&#125;;</span><br><span class="line">    	Thread consumer = <span class="keyword">new</span> Thread() &#123;</span><br><span class="line"></span><br><span class="line">            <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">                queue.loop();</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">        &#125;;</span><br><span class="line">        producer.start();</span><br><span class="line">        consumer.start();</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">        	producer.join();</span><br><span class="line">            Thread.sleep(<span class="number">6000</span>);</span><br><span class="line">            consumer.interrupt();</span><br><span class="line">            consumer.join();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">        &#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Redis的<code>zrem</code>命令是多线程争抢任务的关键，其返回值决定了当前实例是否抢到任务。<code>loop</code>方法可能被多线程、多个进程调用，同一任务可能被多个线程线程抢到，通过<code>zrem</code>决定唯一消费线程。</p>
+<h4 id="优化方向"><a href="#优化方向" class="headerlink" title="优化方向"></a>优化方向</h4><p>上述代码中仍然有个缺陷，即当<code>zrangebyscore</code>得到任务后，使用<code>zrem</code>争抢，没抢到的线程会浪费资源，需要使用Luascript优化逻辑，集成<code>zrangebyscore</code>和<code>zrem</code>为原子操作，多个进程之间争抢任务就不会出现浪费了。</p>
+<h3 id="2-位图"><a href="#2-位图" class="headerlink" title="2. 位图"></a>2. 位图</h3><p>位图不是特殊的数据结构，其就是普通的字符串，<code>byte</code>数组。可以使用普通的<code>get</code>/<code>set</code>指令直接获取和设置整个位图的内容，也可以使用<code>getbit</code>/<code>setbit</code>等当成<code>byte</code>数组处理</p>
+<p>我们需要统计月活时，也可以使用位图标记用户的活跃状态。每个用户都在位图上有一个确定的位置，到月底就看可以直接遍历位图得到用户活跃度。但是当用户活跃度不高时，可能会得不偿失。</p>
+<h4 id="1-基本使用"><a href="#1-基本使用" class="headerlink" title="1. 基本使用"></a>1. 基本使用</h4><p>Redis的位数组是自动扩展，若设置了某个偏移位置超出现有的内容范围，就会自动将位数组进行零位扩充。</p>
+<p>例如，字符<code>h</code>位ASCII码的对应为<code>01101000</code>(104)</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; setbit x 1 1</span><br><span class="line">(integer) 0</span><br><span class="line">127.0.0.1:6379&gt; setbit x 2 1</span><br><span class="line">(integer) 0</span><br><span class="line">127.0.0.1:6379&gt; setbit x 4 1</span><br><span class="line">(integer) 0</span><br><span class="line">127.0.0.1:6379&gt; get x</span><br><span class="line">&quot;h&quot;</span><br></pre></td></tr></table></figure>
+
+<p>上面例子为零存整取，另外还有零存零取，整存领取。零存是用<code>setbit</code>对位置设置，整存就是使用<code>set</code>命令设置字符串。</p>
+<p>常用命令：</p>
+<ul>
+<li><code>setbit x 1 1</code>，零存</li>
+<li><code>set x h</code>，整存</li>
+<li><code>getbit x 1</code>，零取</li>
+<li><code>getbit x</code>，整取</li>
+</ul>
+<h4 id="2-统计和查找"><a href="#2-统计和查找" class="headerlink" title="2. 统计和查找"></a>2. 统计和查找</h4><p>Redis提供了位图统计指令<code>bitcount</code>和位图查找指令<code>bitpos</code>，<code>bitcount</code>用来统计指定范围内1的个数，<code>bitpos</code>用来查找指定范围内出现的第一个0或者1。</p>
+<p>例如，我们可以使用<code>bitcount</code>统计用户签到天数，通过<code>bitpos</code>指令查找用户从哪一天开始签到。若指定了参数范围<code>[start, end]</code>，就可以统计在某个时间范围内用户签到天数，从哪一天开始签到。<code>start</code>和<code>end</code>参数是字节索引，指定范围必须是8的倍数(一个字节占8位)。<code>bitcount</code>和<code>bitpos</code>命令如下：</p>
+<ul>
+<li><code>bitcount key [start end]</code> ，指定范围内1的个数</li>
+<li><code>bitpos key bit [start] [end]</code>，指定范围内出现的0或者1的个数</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set x h</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; bitcount x</span><br><span class="line">(integer) 3</span><br><span class="line">127.0.0.1:6379&gt; bitcount x 0 0   ## x中1的个数</span><br><span class="line">(integer) 3</span><br><span class="line">127.0.0.1:6379&gt; bitpos x 0		## x中第一个0位</span><br><span class="line">(integer) 0</span><br><span class="line">127.0.0.1:6379&gt; bitpos x 1		## x中第一个1位</span><br><span class="line">(integer) 1</span><br><span class="line">127.0.0.1:6379&gt; bitpos x 1 0 0	## x中第0个字符起，第1个1位(实际上就是第0个字符的第一个1位)</span><br><span class="line">(integer) 1		</span><br></pre></td></tr></table></figure>
+
+<h4 id="3-魔术指令bitfield"><a href="#3-魔术指令bitfield" class="headerlink" title="3. 魔术指令bitfield"></a>3. 魔术指令<code>bitfield</code></h4><p><code>setbit</code>/<code>getbit</code>指定位是单个的，若要一次操作多个位则需要使用<code>bitfield</code>。<code>bitfield</code>有3个子指令<code>get</code>/<code>set</code>/<code>incr</code>，都可以对指定片段进行读写，但最多只能处理64个连续的位，超过64位，就需要使用多个子指令。<code>bitfield</code>支持多个子指令。</p>
+<p><img src="https://images.effiu.cn/blog/redis/08.png"></p>
+<p>命令：<code>bitfield key [GET type offset] [SET type offset value] [INCRBY type offset increment] [OVERFLOW WRAP|SAT|FAIL]</code></p>
+<p>举例如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set w hello</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; bitfield w get u4 0		# 取w中第一位开始的四个位，结果为无符号数，0110为6</span><br><span class="line">1) (integer) 6</span><br><span class="line">127.0.0.1:6379&gt; bitfield w get i4 0		# 取w中第一位开始的四个位，结果为有符号数</span><br><span class="line">1) (integer) 6</span><br></pre></td></tr></table></figure>
+
+<p>有符号数时获取的位数组中第一个位为符号位，剩下的才是值。符号位为1，则表示负数。无符号位表示非负数，获取的位数组全部为值。有符号位最大可以获取64位，无符号为最大获取63位(Redis协议中integer是有符号数，第一位为符号位，所以不能传递64位无符号值)。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; bitfield w get u4 0 get u3 2 get i4 0 get i3 2</span><br><span class="line">1) (integer) 6</span><br><span class="line">2) (integer) 5</span><br><span class="line">3) (integer) 6</span><br><span class="line">4) (integer) -3</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; bitfield w set u8 8 97	#从第 9 个位开始，将接下来的 8 个位用无符号数 97 替换</span><br><span class="line">1) (integer) 101</span><br><span class="line">127.0.0.1:6379&gt; get w</span><br><span class="line">&quot;hallo&quot;</span><br></pre></td></tr></table></figure>
+
+<p><code>incrby</code>用来对指定范围的位进行自增操作。自增可能会溢出。Redis默认的溢出规则是折返(WRAP)，出现溢出则将溢出位丢掉。例如：8位无符号位255(11111111)，加1后为<code>100000000</code>，丢弃溢出位1，得0。8位有符号位127(01111111)，加1后溢出<code>10000000</code>，即-128</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set w hello</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; bitfield w incrby u4 2 1	# 从第3位开始，对后面的4个比特位加1 1010 -&gt; 1011</span><br><span class="line">1) (integer) 11</span><br><span class="line">127.0.0.1:6379&gt; bitfield w incrby u4 2 5	# 1011 -&gt; 10000，折返为0</span><br><span class="line">1) (integer) 0</span><br></pre></td></tr></table></figure>
+
+<p><code>bitfield</code>提供了3种溢出策略指令：</p>
+<ul>
+<li><p><code>wrap</code>：折返，折返如上。</p>
+</li>
+<li><p><code>fail</code>：失败报错不执行</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; bitfield w overflow fail incrby u4 2 6</span><br><span class="line">1) (nil)</span><br><span class="line">127.0.0.1:6379&gt; get hello</span><br><span class="line">(nil)</span><br><span class="line">127.0.0.1:6379&gt; get w</span><br><span class="line">&quot;hello&quot;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>sat</code>：饱和截断</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set w hello</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; bitfield w overflow sat incrby u4 2 6	# 1010 -&gt; 10000，饱和截断 -&gt; 1111</span><br><span class="line">1) (integer) 15</span><br></pre></td></tr></table></figure>
+
+
+
+</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/Redis/" rel="tag"># Redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/19/redis/2_distribute_lock/" rel="prev" title="Redis分布式锁">
+      <i class="fa fa-chevron-left"></i> Redis分布式锁
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/" rel="next" title="Redis HyperLogLog和布隆过滤器">
+      Redis HyperLogLog和布隆过滤器 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

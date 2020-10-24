@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="1. 启动MySQL服务 mysqld 这个可执行文件就代表着MySql服务器程序，运行这个可执行文件就可以直接启动一个服务器进程。  mysqld_safe mysqld_safe是一个启动脚本，会间接调用mysqld，而且还启动了一个监控进程，这个监控进程会在服务器进程挂掉得时候重启进程。mysqld_safe会将服务器程序得出错信息和其他诊断信息重定向到某个文件中，产生出错日志，方便排查问题">
+<meta property="og:type" content="article">
+<meta property="og:title" content="认识MqSQL">
+<meta property="og:url" content="https://www.effiu.cn/2019/06/10/mysql/1_first_mysql/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="1. 启动MySQL服务 mysqld 这个可执行文件就代表着MySql服务器程序，运行这个可执行文件就可以直接启动一个服务器进程。  mysqld_safe mysqld_safe是一个启动脚本，会间接调用mysqld，而且还启动了一个监控进程，这个监控进程会在服务器进程挂掉得时候重启进程。mysqld_safe会将服务器程序得出错信息和其他诊断信息重定向到某个文件中，产生出错日志，方便排查问题">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/1224549-20190322161637421-1625662895.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/mysql/1224549-20190322161700846-234684790.png">
+<meta property="article:published_time" content="2019-06-10T02:25:00.000Z">
+<meta property="article:modified_time" content="2019-07-23T07:35:22.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="MySQL">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/mysql/1224549-20190322161637421-1625662895.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/06/10/mysql/1_first_mysql/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>认识MqSQL | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E5%90%AF%E5%8A%A8MySQL%E6%9C%8D%E5%8A%A1"><span class="nav-number">1.</span> <span class="nav-text">1. 启动MySQL服务</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E5%90%AF%E5%8A%A8MySQL%E5%AE%A2%E6%88%B7%E7%AB%AF%E7%A8%8B%E5%BA%8F"><span class="nav-number">2.</span> <span class="nav-text">2. 启动MySQL客户端程序</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E5%AE%A2%E6%88%B7%E7%AB%AF%E4%B8%8E%E6%9C%8D%E5%8A%A1%E5%99%A8%E8%BF%9E%E6%8E%A5%E8%BF%87%E7%A8%8B"><span class="nav-number">3.</span> <span class="nav-text">3. 客户端与服务器连接过程</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-%E6%9C%8D%E5%8A%A1%E5%99%A8%E5%A4%84%E7%90%86%E5%AE%A2%E6%88%B7%E7%AB%AF%E8%AF%B7%E6%B1%82"><span class="nav-number">4.</span> <span class="nav-text">4. 服务器处理客户端请求</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#5-%E5%B8%B8%E7%94%A8%E5%AD%98%E5%82%A8%E5%BC%95%E6%93%8E"><span class="nav-number">5.</span> <span class="nav-text">5. 常用存储引擎</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#6-%E7%9B%B8%E5%85%B3%E6%93%8D%E4%BD%9C"><span class="nav-number">6.</span> <span class="nav-text">6. 相关操作</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/06/10/mysql/1_first_mysql/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          认识MqSQL
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-06-10 10:25 10:25:00" itemprop="dateCreated datePublished" datetime="2019-06-10T10:25:00+08:00">2019-06-10 10:25</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-07-23 15:35 15:35:22" itemprop="dateModified" datetime="2019-07-23T15:35:22+08:00">2019-07-23 15:35</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/mysql/" itemprop="url" rel="index"><span itemprop="name">mysql</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/06/10/mysql/1_first_mysql/" class="post-meta-item leancloud_visitors" data-flag-title="认识MqSQL" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/06/10/mysql/1_first_mysql/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/06/10/mysql/1_first_mysql/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h6 id="1-启动MySQL服务"><a href="#1-启动MySQL服务" class="headerlink" title="1. 启动MySQL服务"></a>1. 启动MySQL服务</h6><ul>
+<li><p><strong>mysqld</strong></p>
+<p>这个可执行文件就代表着<code>MySql</code>服务器程序，运行这个可执行文件就可以直接启动一个服务器进程。</p>
+</li>
+<li><p><strong>mysqld_safe</strong></p>
+<p><code>mysqld_safe</code>是一个启动脚本，会间接调用<code>mysqld</code>，而且还启动了一个监控进程，这个监控进程会在服务器进程挂掉得时候重启进程。<code>mysqld_safe</code>会将服务器程序得出错信息和其他诊断信息重定向到某个文件中，产生出错日志，方便排查问题。</p>
+</li>
+<li><p><strong>mysql.server</strong></p>
+<p><code>mysql.server</code>也是一个启动脚本，会间接调用<code>mysqld_safe</code>，调用命令<code>mysql.server start</code>。其实际文件是<code>../support-files/mysql.server</code></p>
+</li>
+<li><p><strong>mysqld_multi</strong></p>
+<p>一台计算机上运行多个MySQL进程时，<code>mysqld_multi</code>可执行文件可以对每个实例进行启动或停止进行监控。</p>
+</li>
+</ul>
+<h6 id="2-启动MySQL客户端程序"><a href="#2-启动MySQL客户端程序" class="headerlink" title="2. 启动MySQL客户端程序"></a>2. 启动MySQL客户端程序</h6><ol>
+<li>连接MySQL服务：<code>mysql -h host -u username -p</code></li>
+<li>断开连接：<code>quit</code>、<code>exit</code>、<code>\q</code></li>
+</ol>
+<h6 id="3-客户端与服务器连接过程"><a href="#3-客户端与服务器连接过程" class="headerlink" title="3. 客户端与服务器连接过程"></a>3. 客户端与服务器连接过程</h6><p>MySQL支持下边三种客户端进程和服务器进程得通信方式</p>
+<ol>
+<li><p><strong>TCP/IP</strong></p>
+<p>数据库进程与客户端进程在不同的服务器中，它们之间通过网络通讯。<strong>MySQL</strong>采用<strong>TCP</strong>作为服务器和客户端之间的网络通信协议。在网络中的其他进程就可以通过<code>IP地址 + 端口号</code>的方式来与这个进程连接。<strong>MySQL</strong>服务器默认监听3306端口。<code>mysqld -P3307</code>，指定启动端口号</p>
+</li>
+</ol>
+<blockquote>
+<p><code>TCP/IP</code>网络体系结构是现在通用的一种网络体系结构，其中的<code>TCP</code>和<code>IP</code>是体系结构中两个非常重要的网络协议。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>命名管道和共享内存</strong></p>
+<p><code>Windows</code>用户，客户端进程和服务器进程之间可以考虑使用<strong>命名管道</strong>和<strong>共享内存</strong>进行通信。</p>
+<ul>
+<li><strong>命名管道</strong>，服务器启动参数加<code>--enable-named-pipe</code>，客户端命令中加<code>--pipe</code>或者<code>--protocol=pipe</code></li>
+<li><strong>共享内存</strong>，服务器启动参数加<code>--share-memory</code>，也可以在客户端命令中加<code>--protocol=memory</code>显式指定使用共享内存通信。但要求客户端与服务端进程在同一台<code>Windows</code>主机中</li>
+</ul>
+</li>
+<li><p><strong>Unix套接字文件</strong></p>
+<p>服务端进程与客户端进程都在同一台类<strong>Unix</strong>服务器上，则可以使用<strong>Unix</strong>域套接字文件来进行进程间通信。启动客户端程序的时候指定主机为<code>localhost</code>或者指定<code>--protocol=socket</code>启动参数就会使用<strong>Unix</strong>域套接字文件进行通信。<strong>MySQL</strong>默认监听<strong>Unix</strong>套接字文件路径<code>/tmp/mysql.sock</code>，客户端也默认使用这个文件。也可以指定<code>socket</code>套接字参数<code>--socket=/tmp/a.txt</code>。</p>
+</li>
+</ol>
+<h6 id="4-服务器处理客户端请求"><a href="#4-服务器处理客户端请求" class="headerlink" title="4. 服务器处理客户端请求"></a>4. 服务器处理客户端请求</h6><p><img src="https://images.effiu.cn/blog/mysql/1224549-20190322161637421-1625662895.png" alt="请求过程"></p>
+<ol>
+<li><p>连接管理</p>
+<p>客户端与服务端连接时，服务端会创建或者分配一个线程专门处理。断开连接后，服务器并不会立即销毁这个线程，而是将该线程缓存起来。在另一个客户端申请连接后，将该线程继续分配给其他客户端，从而节省开销。<code>Mysql</code>会为每个客户端分配一个线程，但是线程分配太多会影响性能，所以也需要限制可以同时连接到服务器的客户端数量。相关命令如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">show variables like &#39;%max_connections%&#39;; &#x2F;&#x2F; 查看最低连接数</span><br><span class="line">+-----------------------+-------+</span><br><span class="line">| Variable_name         | Value |</span><br><span class="line">+-----------------------+-------+</span><br><span class="line">| extra_max_connections | 1     |</span><br><span class="line">| max_connections       | 10000 |</span><br><span class="line">+-----------------------+-------+</span><br><span class="line">2 rows in set</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">show status like &#39;Threads%&#39;;	&#x2F;&#x2F; 查看相关线程数</span><br><span class="line">+-------------------------+-------+</span><br><span class="line">| Variable_name           | Value |</span><br><span class="line">+-------------------------+-------+</span><br><span class="line">| Threads_cached          | 247   |		&#x2F;&#x2F; 缓存连接数</span><br><span class="line">| Threads_connected       | 204   |		&#x2F;&#x2F; 打开的连接数</span><br><span class="line">| Threads_created         | 451   |</span><br><span class="line">| Threads_running         | 1     |		&#x2F;&#x2F; 激活的连接数，一般低于connected数值</span><br><span class="line">+-------------------------+-------+</span><br><span class="line">8 rows in set</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">show full processlist;   &#x2F;&#x2F; 查看所有连接线程的连接信息</span><br><span class="line">show processlist;		 &#x2F;&#x2F; 显示前100条连接信息</span><br><span class="line">+---------+-------------+---------------------+------------------------+---------+-------+-------+-----------------------+-----------+---------------+</span><br><span class="line">| Id      | User        | Host                | db                     | Command | Time  | State | Info                  | Rows_sent | Rows_examined |</span><br><span class="line">+---------+-------------+---------------------+------------------------+---------+-------+-------+-----------------------+-----------+---------------+</span><br></pre></td></tr></table></figure>
+
+<p>客户端连接时，需要携带<code>host</code>、<code>username</code>、<code>port</code>、<code>password</code>等信息，客户端会进行认证，认证失败服务器会拒绝连接。</p>
+</li>
+<li><p>解析与优化</p>
+<p><code>MySQL</code>连接正常后，还要经过其他处理。</p>
+<ol>
+<li><p>查询缓存</p>
+<p><code>MySQL</code>会把服务器处理的查询请求和结果缓存起来，下次请求若命中缓存则会直接返回结果。这个缓存是在不同客户端之间共享的。不过当查询请求有任何变动（空格、注释、大小写等）都会导致不会命中缓存，另外查询请求中包含某些系统函数、用户自定义变量和函数、一些系统表(<code>mysql</code>、<code>information_schema</code>、<code> performance_schema</code>)都会导致缓存请求不会被缓存，例如<code>NOW</code>函数。</p>
+<p><code>MySQL</code>的缓存系统会监视涉及到的每张表，只要该表的结构或者数据被修改（<code>INSERT</code>、<code>UPDATE</code>、<code>DELETE</code>、<code>DROP TABLE</code>、<code>ALTER TABLE</code>等语句）都会导致相关缓存失效并删除。</p>
+<p>虽然查询缓存会提高性能，但维护缓存也会造成开销（去缓存中查询、更新缓存、占用内存空间）等，不推荐使用缓存</p>
+</li>
+<li><p>语法解析</p>
+<p>缓存命中失败，就会进入查询阶段。<code>MySQL</code>会对客户端发送过来的文本进行解析，判断语法是否正确，从文本中将要查询的表、字段、查询条件解析出来。其本质是一个编译过程，涉及词法解析、语法分析、语义分析等阶段。</p>
+</li>
+<li><p>查询优化</p>
+<p>当服务端经过语法解析后，获得了查询的条件、表、列等需要的信息。<code>MySQL</code>优化程序会对语句进行优化，例如：外连接转换为内连接、表达式简化、子查询转化为连接等。优化结果会生成一个执行计划，会表明应该使用哪些索引查询、表的连接顺序是什么等，可以使用<code>EXPLAIN</code>语句查看语句的执行计划</p>
+</li>
+<li><p>存储引擎</p>
+<p><code>MySQL</code>服务器把数据的存储和提取操作都封装到了<strong>存储引擎</strong>模块里，表是一行一行的记录组成的，但是这是逻辑上的概念，实际在物理存储介质上，读取数据、写入数据都是<strong>存储引擎</strong>负责的。<code>MySQL</code>提供了多种存储引擎，不同的存储引擎有不同的结构，存取算法也有区别。</p>
+</li>
+</ol>
+<blockquote>
+<p>为了方便管理把，连接管理、缓存查询、语法解析、查询优化不涉及真实数据存储的功能划分为<code>MySQL server</code>的功能，真实存储数据的为<strong>存储引擎</strong>。</p>
+</blockquote>
+<p><img src="https://images.effiu.cn/blog/mysql/1224549-20190322161700846-234684790.png" alt="请求过程"></p>
+</li>
+</ol>
+<h6 id="5-常用存储引擎"><a href="#5-常用存储引擎" class="headerlink" title="5. 常用存储引擎"></a>5. 常用存储引擎</h6><table>
+<thead>
+<tr>
+<th align="center">存储引擎</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">ARCHIVE</td>
+<td align="center">用于数据存档，存储之后不能修改</td>
+</tr>
+<tr>
+<td align="center">BLACKHOLE</td>
+<td align="center">黑洞引擎，解决Mysql集群，同步<code>binlog</code>时给master造成太大负担问题，<a target="_blank" rel="noopener" href="https://www.cnblogs.com/wt645631686/p/8086682.html">主从架构中的作用</a></td>
+</tr>
+<tr>
+<td align="center">CSV</td>
+<td align="center">在存储数据时，以逗号分隔各个数据项，<a target="_blank" rel="noopener" href="https://www.jianshu.com/p/7ec7429a78d2">CSV</a></td>
+</tr>
+<tr>
+<td align="center">FEDERADED</td>
+<td align="center">用来访问远程表</td>
+</tr>
+<tr>
+<td align="center">InnoDB</td>
+<td align="center">具备外键，支持索引，支持事务</td>
+</tr>
+<tr>
+<td align="center">MEMORY</td>
+<td align="center">置于内存的表</td>
+</tr>
+<tr>
+<td align="center">MERGE</td>
+<td align="center">用来管理多个MyISAM表构成的表集合</td>
+</tr>
+<tr>
+<td align="center">MyISAM</td>
+<td align="center">主要的非事务处理存储引擎，查询快、占用空间小、处理速度快，但不支持事务</td>
+</tr>
+<tr>
+<td align="center">NDB</td>
+<td align="center">MySQL集群专用存储引擎</td>
+</tr>
+</tbody></table>
+<p>存储引擎对于某些功能的支持情况如下：</p>
+<table>
+<thead>
+<tr>
+<th align="center">Feature</th>
+<th align="center">MyISAM</th>
+<th align="center">Memory</th>
+<th align="center">InnoDB</th>
+<th align="center">Archive</th>
+<th align="center">NDB</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">B-tree indexes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Backup/point-in-time recovery</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Cluster database support</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Clustered indexes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Compressed data</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Data caches</td>
+<td align="center">no</td>
+<td align="center">N/A</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Encrypted data</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Foreign key support</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Full-text search indexes</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Geospatial data type support</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Geospatial indexing support</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Hash indexes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Index caches</td>
+<td align="center">yes</td>
+<td align="center">N/A</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Locking granularity</td>
+<td align="center">Table</td>
+<td align="center">Table</td>
+<td align="center">Row</td>
+<td align="center">Row</td>
+<td align="center">Row</td>
+</tr>
+<tr>
+<td align="center">MVCC</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+</tr>
+<tr>
+<td align="center">Query cache support</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Replication support</td>
+<td align="center">yes</td>
+<td align="center">Limited</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Storage limits</td>
+<td align="center">256TB</td>
+<td align="center">RAM</td>
+<td align="center">64TB</td>
+<td align="center">None</td>
+<td align="center">384EB</td>
+</tr>
+<tr>
+<td align="center">T-tree indexes</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Transactions</td>
+<td align="center">no</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td align="center">yes</td>
+</tr>
+<tr>
+<td align="center">Update statistics for data dictionary</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+<td align="center">yes</td>
+</tr>
+</tbody></table>
+<h6 id="6-相关操作"><a href="#6-相关操作" class="headerlink" title="6. 相关操作"></a>6. 相关操作</h6><ol>
+<li>查看当前支持的引擎</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">SHOW ENGINES;</span><br><span class="line">+--------------------+---------+----------------------------------------------------------------+--------------+------+------------+</span><br><span class="line">| Engine             | Support | Comment                                                        | Transactions | XA   | Savepoints |</span><br><span class="line">+--------------------+---------+----------------------------------------------------------------+--------------+------+------------+</span><br></pre></td></tr></table></figure>
+
+<p><code>Support</code>表示该引擎是否可用，<code>Default</code>代表默认引擎，<code>Comment</code>是对存储引擎的一个描述，<code>Transactions</code>列代表该存储引擎是否支持事务处理。<code>XA</code>列代表着该存储引擎是否支持分布式事务。<code>Savepoints</code>代表着该存储引擎是否支持部分事务回滚。</p>
+<ol start="2">
+<li><p>设置表的存储引擎</p>
+<p>存储引擎是对表中的数据进行提取和写入的，我们可以为不同表设置不同的存储引擎。相关SQL如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">-- 建表SQL，指定存储引擎</span><br><span class="line">CREATE TABLE table_name(</span><br><span class="line">    建表语句;</span><br><span class="line">) ENGINE &#x3D; INNODB;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">-- 修改表的存储引擎</span><br><span class="line">ALTER TABLE table_name ENGINE&#x3D;InnoDB;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">-- 查看建表语句，会展示当前表引擎</span><br><span class="line">SHOW CREATE TABLE table_name\G;</span><br></pre></td></tr></table></figure>
+
+
+
+
+</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/MySQL/" rel="tag"># MySQL</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/10/jvm/3_gc_memory_allocation/" rel="prev" title="垃圾收集器与内存分配策略">
+      <i class="fa fa-chevron-left"></i> 垃圾收集器与内存分配策略
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/06/10/jvm/4_vm_monitor/" rel="next" title="虚拟机性能监控与故障处理工具">
+      虚拟机性能监控与故障处理工具 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Java中基本上不会显式的调用分配内存的函数，甚至不用关心哪些程序指令需要分配内存、哪些不需要分配内存。因为在Java中，分配和回收内存都由JVM自动完成。但是我们仍然需要了解Java是如何管理内存的。本节内容:  从操作系统层面介绍物理内存的分配和Java运行的内存分配之间的关系，Java使用的内存与物理内存的区别 Java如何从物理内存申请内存，如何划分 Java如何分配和回收内存">
+<meta property="og:type" content="article">
+<meta property="og:title" content="JVM内存管理">
+<meta property="og:url" content="https://www.effiu.cn/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Java中基本上不会显式的调用分配内存的函数，甚至不用关心哪些程序指令需要分配内存、哪些不需要分配内存。因为在Java中，分配和回收内存都由JVM自动完成。但是我们仍然需要了解Java是如何管理内存的。本节内容:  从操作系统层面介绍物理内存的分配和Java运行的内存分配之间的关系，Java使用的内存与物理内存的区别 Java如何从物理内存申请内存，如何划分 Java如何分配和回收内存">
+<meta property="og:locale">
+<meta property="article:published_time" content="2020-04-11T10:16:00.000Z">
+<meta property="article:modified_time" content="2020-04-11T10:16:47.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>JVM内存管理 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E7%89%A9%E7%90%86%E5%86%85%E5%AD%98%E5%92%8C%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98"><span class="nav-number">1.</span> <span class="nav-text">1. 物理内存和虚拟内存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E5%86%85%E6%A0%B8%E7%A9%BA%E9%97%B4%E5%92%8C%E7%94%A8%E6%88%B7%E7%A9%BA%E9%97%B4"><span class="nav-number">2.</span> <span class="nav-text">2. 内核空间和用户空间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Java%E4%B8%AD%E9%9C%80%E8%A6%81%E4%BD%BF%E7%94%A8%E5%86%85%E5%AD%98%E7%9A%84%E7%BB%84%E4%BB%B6"><span class="nav-number">3.</span> <span class="nav-text">3. Java中需要使用内存的组件</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Java%E5%A0%86"><span class="nav-number">3.1.</span> <span class="nav-text">1. Java堆</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E7%BA%BF%E7%A8%8B"><span class="nav-number">3.2.</span> <span class="nav-text">2. 线程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E7%B1%BB%E5%92%8C%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8"><span class="nav-number">3.3.</span> <span class="nav-text">3. 类和类加载器</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-NIO"><span class="nav-number">3.4.</span> <span class="nav-text">4. NIO</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-JNI"><span class="nav-number">3.5.</span> <span class="nav-text">5. JNI</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-JVM%E5%86%85%E5%AD%98%E7%BB%93%E6%9E%84"><span class="nav-number">4.</span> <span class="nav-text">4. JVM内存结构</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-PC%E5%AF%84%E5%AD%98%E5%99%A8"><span class="nav-number">4.1.</span> <span class="nav-text">1.PC寄存器</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Java%E6%A0%88"><span class="nav-number">4.2.</span> <span class="nav-text">2. Java栈</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E5%A0%86"><span class="nav-number">4.3.</span> <span class="nav-text">3. 堆</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-%E6%96%B9%E6%B3%95%E5%8C%BA"><span class="nav-number">4.4.</span> <span class="nav-text">4. 方法区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-%E8%BF%90%E8%A1%8C%E6%97%B6%E5%B8%B8%E9%87%8F%E6%B1%A0"><span class="nav-number">4.5.</span> <span class="nav-text">5. 运行时常量池</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-%E6%9C%AC%E5%9C%B0%E6%96%B9%E6%B3%95%E6%A0%88"><span class="nav-number">4.6.</span> <span class="nav-text">6. 本地方法栈</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-JVM%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E7%AD%96%E7%95%A5"><span class="nav-number">5.</span> <span class="nav-text">5. JVM内存分配策略</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E9%80%9A%E5%B8%B8%E7%9A%84%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E7%AD%96%E7%95%A5"><span class="nav-number">5.1.</span> <span class="nav-text">1. 通常的内存分配策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Java%E4%B8%AD%E7%9A%84%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D"><span class="nav-number">5.2.</span> <span class="nav-text">2. Java中的内存分配</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-JVM%E5%9B%9E%E6%94%B6%E7%AD%96%E7%95%A5"><span class="nav-number">6.</span> <span class="nav-text">6. JVM回收策略</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E9%9D%99%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%9B%9E%E6%94%B6"><span class="nav-number">6.1.</span> <span class="nav-text">1. 静态内存分配回收</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%92%8C%E5%9B%9E%E6%94%B6"><span class="nav-number">6.2.</span> <span class="nav-text">2. 动态内存分配和回收</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6"><span class="nav-number">6.3.</span> <span class="nav-text">3 垃圾回收</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-%E5%86%85%E5%AD%98%E9%97%AE%E9%A2%98%E5%88%86%E6%9E%90"><span class="nav-number">7.</span> <span class="nav-text">7. 内存问题分析</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          JVM内存管理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2020-04-11 18:16 18:16:00 / Modified: 18:16:47" itemprop="dateCreated datePublished" datetime="2020-04-11T18:16:00+08:00">2020-04-11 18:16</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/" class="post-meta-item leancloud_visitors" data-flag-title="JVM内存管理" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Java中基本上不会显式的调用分配内存的函数，甚至不用关心哪些程序指令需要分配内存、哪些不需要分配内存。因为在Java中，分配和回收内存都由JVM自动完成。但是我们仍然需要了解Java是如何管理内存的。本节内容:</p>
+<ul>
+<li>从操作系统层面介绍物理内存的分配和Java运行的内存分配之间的关系，Java使用的内存与物理内存的区别</li>
+<li>Java如何从物理内存申请内存，如何划分</li>
+<li>Java如何分配和回收内存</li>
+</ul>
+<a id="more"></a>
+
+<h2 id="1-物理内存和虚拟内存"><a href="#1-物理内存和虚拟内存" class="headerlink" title="1. 物理内存和虚拟内存"></a>1. 物理内存和虚拟内存</h2><p>物理内存是RAM(随机存储器)。计算机中还有寄存器，用于存储计算单元执行指令的中间结果。寄存器的大小决定了一次计算可使用的最大数值。</p>
+<p>链接处理器和RAM或者处理器和寄存器的是地址总线。地址总线的宽度影响了物理地址的索引范围，因为总线的宽度决定了处理器一次可以从寄存器或者内存中获取多少bit，以及处理器最大可以寻址的地址空间。例如32位地址总线可以寻址$0$ ~ $0^{32}$个内存位置。一个地址是一个字节，所以共4GB的内存空间</p>
+<p>大部分情况下都通过调用操作系统提供的接口来访问内存，在Java中甚至不需要写和内存相关的代码。当我们要运行程序时，都要先向操作系统申请内存地址，通常操作系统管理内存的申请空间是按照进程管理的。每个进程都拥有自己独立的地址空间，操作系统会保证每个进程只能访问自己的内存空间。这既能保证程序的安全，又便于操作系统管理物理内存。</p>
+<p>进程的内存空间独立是逻辑上的独立，是由操作系统保证的，但是真正的物理空间并不一定是只能由一个进程来使用。因为随着程序越来越庞大以及设计的多任务性，物理内存无法保证满足程序的需求，这种情况下出现了虚拟内存。</p>
+<p>虚拟内存使得多个进程在同时运行时可以共享物理内存，但这只是空间上的共享，逻辑上仍然相互独立。虚拟内存可以让进程共享物理内存、提高内存利用率，还可以扩展内存的地址空间。例如：一个虚拟内存地址可能被影射到物理内存、文件或者其他可以寻址的存储器上；一个进程在不活动的情况下，操作系统可以将这个进程相关的物理内存中的数据迁移到磁盘文件中，将物理内存留给正在活动的程序使用。但是要尽量避免这种情况的经常出现，操作系统频繁的交互物理内存的数据和磁盘数据，效率会非常低。在Linux服务器上，要关注Linux中的swap分区的活跃度。若swap分区被频繁使用，系统将会非常缓慢，这可能意味着物理内存已经严重不足或者某些程序没有及时释放内存。</p>
+<h2 id="2-内核空间和用户空间"><a href="#2-内核空间和用户空间" class="headerlink" title="2. 内核空间和用户空间"></a>2. 内核空间和用户空间</h2><p>计算机中的内存空间被分为内核空间和用户空间，程序只能使用用户空间的内存。</p>
+<p>内核空间主要是指操作系统运行时所使用的用于程序调度、虚拟内存的使用或者连接硬件资源等的程序逻辑。为了保证操作系统的稳定性，运行在操作系统中的用户程序不能访问操作系统所使用的内存空间。为了保证安全性，用户程序访问硬件资源只能由操作系统发起，如网络连接等，需要调用操作系统提供的接口来实现，这个过程即<strong>系统调用</strong>。每一次系统调用都会存在两个内存空间的切换。这种从内核空间到用户空间的数据复制很费时，虽然保证了程序运行的安全性和稳定性，但是也牺牲了效率。</p>
+<blockquote>
+<p>  网络传输也是一次系统调用，通过网络传输的数据先是从内核空间接受来自远程服务器的数据，然后从内核空间复制到用户空间。</p>
+</blockquote>
+<p>内核空间和用户空间的大小分配也是一个问题。在分配给用户空间供用户程序使用，还是保证内核有足够的空间来运行。</p>
+<h2 id="3-Java中需要使用内存的组件"><a href="#3-Java中需要使用内存的组件" class="headerlink" title="3. Java中需要使用内存的组件"></a>3. Java中需要使用内存的组件</h2><h3 id="1-Java堆"><a href="#1-Java堆" class="headerlink" title="1. Java堆"></a>1. Java堆</h3><p>Java堆用于存储Java对象的内存区域，堆的大小在JVM启动时一次向操作系统申请完成。</p>
+<ul>
+<li><code>-Xmx</code>表示堆的最大大小</li>
+<li><code>-Xms</code>表示初始大小</li>
+</ul>
+<p>Java堆中内存空间的管理由JVM控制，对象创建由Java应用程序控制，但是对象所占的空间释放由管理堆内存的垃圾收集器完成。</p>
+<h3 id="2-线程"><a href="#2-线程" class="headerlink" title="2. 线程"></a>2. 线程</h3><p>JVM运行实际程序的实体是线程，当然线程需要内存空间来存储一些必要的数据。每个线程创建时JVM都会为其创建一个对战，堆栈的大小根据不同JVM实现而不同，一般在256KB~756KB之间。</p>
+<p>线程所占的空间比堆空间小。但是若线程过多，线程总内存使用量也可能非常大。当前很多应用程序根据CPU的核数来分配创建的线程数。若线程数超过CPU核数效率就会降低。</p>
+<h3 id="3-类和类加载器"><a href="#3-类和类加载器" class="headerlink" title="3. 类和类加载器"></a>3. 类和类加载器</h3><p>Java中类和类加载器本身都需要内存空间，其存储在堆中，这个区域叫做永久代(PermGen区)。</p>
+<p>JVM是按需加载类的，对于一个jar包中的类，JVM不会全部加载，而是只加载那些在应用程序中明确使用的类到内存中。若要查看JVM到底加载了哪些类，可以在启动参数上加<code>-verbose:class</code></p>
+<p>理论上使用的Java类越多，需要占用的内存也越多。类被卸载的条件如下：</p>
+<ul>
+<li>Java堆中没有对表示该类加载器的<code>java.lang.classLoader</code>对象的引用</li>
+<li>Java堆没有对表示类加载器的类的任何<code>java.lang.Class</code>对象的引用</li>
+<li>Java堆上该类加载器的任何类的所有对象都不在存活(被引用)</li>
+</ul>
+<p>很明显，JVM本身创建的3个类加载器加载的类都不会被释放。</p>
+<h3 id="4-NIO"><a href="#4-NIO" class="headerlink" title="4. NIO"></a>4. NIO</h3><p>Java在1.4版本后新增了NIO类库。引入了基于通道和缓冲区来执行的IO方式。NIO使用<code>java.nio.ByteBuffer。allocateDirect()</code>分配内存，即NIO的直接内存，<code>ByteBuffer.allocateDirector</code>分配的内存使用的是本机北村而不是Java堆上的内存，其每一次分配内存都会调用操作系统的<code>os::malloc()</code>函数。直接<code>ByteBuffer</code>产生的数据若与网络或者磁盘交互都会在操作系统的内核空间发生，不需要将数据复制到Java内存中，很显然这减少了内核空间与用户空间之间的数据交换。</p>
+<p>直接<code>ByteBuffer</code>对象会自动清理本机缓冲区，但这个过程只能作为Java堆GC的一部分执行。GC仅在Java堆被填满，以至于无法为堆分配请求服务时发生，或者在Java应用程序中显式请求时发生。当前很多NIO框架中都在代码中显式的调用<code>System.gc()</code>来释放NIO持有的内存。但是这会影响程序的性能，增加GC的次数。可以通过<code>-XX:+DisableExplicitGC</code>控制<code>System.gc()</code>的影响，但是这也可能导致NIO Direct memory内存泄漏问题。</p>
+<h3 id="5-JNI"><a href="#5-JNI" class="headerlink" title="5. JNI"></a>5. JNI</h3><p>JNI技术使本机代码(如C语言)可以调用Java方法，即native memory。Java运行时本身也依赖与JNI代码来实现类库功能，如文件操作、网络IO操作或者其他系统调用。JNI也会增加Java运行时的本机内存占用。</p>
+<h2 id="4-JVM内存结构"><a href="#4-JVM内存结构" class="headerlink" title="4. JVM内存结构"></a>4. JVM内存结构</h2><p>JVM是按照运行时数据的存储结构来划分内存结构的，不同格式的数据存储在不同的区域。运行时数据包括Java程序本身的数据信息和JVM运行Java程序需要的额外数据信息，如记录当前程序指令执行的指针等</p>
+<ul>
+<li>PC寄存器数据</li>
+<li>Java栈</li>
+<li>堆</li>
+<li>方法区</li>
+<li>本地方法区</li>
+<li>运行时常量池</li>
+</ul>
+<h3 id="1-PC寄存器"><a href="#1-PC寄存器" class="headerlink" title="1.PC寄存器"></a>1.PC寄存器</h3><p>PC寄存器严格来说是一个数据结构，用于保存当前正常执行的程序的内存地址，而Java程序是多线程执行的，所以不能一直线性执行下去，若有多个线程交叉执行，被中断的线程的程序当前执行到哪条内存地址必然被保存，便于恢复执行时再按照被中断时的指令地址继续执行。</p>
+<p>JVM规范只定义了Java方法需要记录指针信息，而对于Native方法，并没有要求记录指针地址。</p>
+<h3 id="2-Java栈"><a href="#2-Java栈" class="headerlink" title="2. Java栈"></a>2. Java栈</h3><p>Java栈是与线程关联在一起，每当创建一个线程时，JVM就会为这个线程创建一个对应的Java栈，在这个Java栈中又会有多个栈桢，这些栈桢是与方法关联在一起的，每运行一个方法就创建一个栈桢，每个栈桢都含有一些内部变量、操作栈和方法返回值等信息</p>
+<p>每当一个方法执行完成时，这个栈桢就会弹出栈桢的元素作为方法的返回值(若上一栈桢没有返回值，那么当前栈桢的操作栈的操作数没有变化)，并清除这个栈桢，Java栈的栈顶的栈桢是当前正在执行的活动栈，即正在执行的方法，PC寄存器也会指向这个地址。只有活动栈的本地变量可以被操作栈使用。</p>
+<p>Java栈与Java线程对应的，数据不是共享的，所以不用关心数据的一致性问题，也不会存在同步锁的问题</p>
+<h3 id="3-堆"><a href="#3-堆" class="headerlink" title="3. 堆"></a>3. 堆</h3><p>堆是存储Java对象的地方，是JVM管理Java对象的核心存储区域。每一个存储在堆中的Java对象都是对应的Class的一个副本，其会复制包括继承自它的父类的所有非静态属性</p>
+<p>堆是被所有Java线程共享的，所以其存在同步问题</p>
+<h3 id="4-方法区"><a href="#4-方法区" class="headerlink" title="4. 方法区"></a>4. 方法区</h3><p>JVM方法区是用于存储类结构信息的地方。class解析成JVM能识别的几个部分，不同部分会在class被JVM加载到内存中时，存储到不同的数据结构中，常量池、域、方法数据、方法体、构造函数，包括类中的专用方法、实例初始化、接口初始化都存储在这个区域。</p>
+<p>方法区属于Java堆(永久区)的一部分，其可以被所有线程共享，且大小可以通过参数来设置。</p>
+<p>方法区在永久区中，所以其是受JVM管理的，也会被GC回收器回收，但是其存储的信息相对比较稳定。</p>
+<h3 id="5-运行时常量池"><a href="#5-运行时常量池" class="headerlink" title="5. 运行时常量池"></a>5. 运行时常量池</h3><p>JVM规范中使这样定义运行时常量池的: <strong>Runtime Constant Pool</strong>代表运行时每个class文件中的常量表，包括编译期的数字常量、方法或者域的引用(运行时解析)。运行时常量池类似于符号表，运行时常量池是在JVM的方法区中分配的，每个Class或者Interface的常量池都是在JVM创建class或者接口时创建的。可以抛出OutOfMemoryError</p>
+<h3 id="6-本地方法栈"><a href="#6-本地方法栈" class="headerlink" title="6. 本地方法栈"></a>6. 本地方法栈</h3><p>本地方法栈是为了JVM运行Native方法准备的空间，其和Java栈的作用类似。除了代码中包含的Native方法会使用这个存储空间，在JVM利用JIT技术时也会将一些Java方法重新编译为Native Code，编译后的本地代码也是利用这个栈跟踪方法的执行状态的。</p>
+<p>JVM中没有对本地方法栈做严格限制，其可以由不同的JVM实现者自由实现，其也可以抛出OutOfMemoryError和StackOverflowError。</p>
+<h2 id="5-JVM内存分配策略"><a href="#5-JVM内存分配策略" class="headerlink" title="5. JVM内存分配策略"></a>5. JVM内存分配策略</h2><h3 id="1-通常的内存分配策略"><a href="#1-通常的内存分配策略" class="headerlink" title="1. 通常的内存分配策略"></a>1. 通常的内存分配策略</h3><p>操作系统中内存分配策略分为三种：</p>
+<ul>
+<li>静态内存分配</li>
+<li>栈内存分配</li>
+<li>堆内存分配</li>
+</ul>
+<p>静态内存分配指在程序编译时就可以确定每个数据在运行时的存储空间需求。这种分配策略不允许在程序代码中有可变数据结构(例如:可变数组)的存在，也不允许有嵌套或者递归的结构出现，因为这会导致编译程序无法计算准确的存储空间需求</p>
+<p>栈式内存分配也被称为动态存储分配，是由一个类似于堆栈的运行栈来实现的。与静态内存分配相反，栈式内存中程序对数据区的需求在编译时是完全未知的，只有到了运行时才知道，但是规定程序进入一个程序模块时，必须知道程序模块所需的数据区大小才能够为其分配内存。栈式内存分配按照先进后出的原则进行分配。</p>
+<p>堆内存分配是当程序真正运行到相应代码时才会知道空间大小。堆分配是最自由的，但却对操作系统和内存管理程序来说是一种挑战，在运行时分配内存运行效率也是最差的</p>
+<h3 id="2-Java中的内存分配"><a href="#2-Java中的内存分配" class="headerlink" title="2. Java中的内存分配"></a>2. Java中的内存分配</h3><p>JVM内存分配基于两种，分别是堆和栈。</p>
+<p>Java栈分配是和线程绑定的。当创建线程时，JVM就会为这个线程创建一个新的栈，线程的方法的调用和返回对应于这个Java栈的压栈和出栈。当线程调用一个方法时，JVM就会在Java堆栈里新压入一个栈帧，这个帧就是当前的活跃帧。在方法执行期间，这个帧用来保存参数、局部变量、中间计算过程和返回值等数据</p>
+<p>栈中主要存放一些基本类型的变量数据和对象句柄(引用)。存取速度比堆快、仅次于寄存器，栈数据可以共享。缺点是存在栈中的数据大小与生存期是必须确定的。</p>
+<p><a href="https://www.effiu.cn/blog/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/">JVM方法调用栈</a>中，查看字节码可以看到每个方法中都有attribute，里面包括<code>stack=2, locals=4, args_size=1</code>部分，分别说明了stack和local variable的最大值。</p>
+<blockquote>
+<p>  若非static方法还会有隐藏的this指针，local variable和args_size都会+1</p>
+</blockquote>
+<p>这里说是最大值是因为JVM在真正执行时分配的stack和local variable的空间是可以公用的。若不同变量作用域没有重合，Slot是可以重复使用的。</p>
+<p>应用程序在运行中创建的所有类实例或者数组都存放在堆中，并由应用程序所有线程共享。Java中分配堆内存是自动初始化的，所有对象的存储空间都是在堆中分配的，但是这个对象的引用在栈中分配的。在创建对象的过程中堆中分配的内存用来建立对象，栈中分配内存用来存储指向这个堆对象的指针。</p>
+<p>Java堆是一个运行时数据区，对象通过<code>new</code>、<code>newarray</code>、<code>anewarray</code>、<code>multianewarray</code>等指令创建，它们不需要显式释放内存。堆是由垃圾收集器负责回收的，堆的优势是动态的分配内存大小、生存期也不必事先知道。Java的GC会自动回收不再使用的数据。但是缺点是由于要在运行时动态分配内存，存取速度慢。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">    String s = <span class="keyword">new</span> String(<span class="string">&quot;123&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>javac -v</code>后，查看指令</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(java.lang.String[])</span></span>;</span><br><span class="line">   descriptor: ([Ljava/lang/String;)V</span><br><span class="line">   flags: ACC_PUBLIC, ACC_STATIC</span><br><span class="line">   Code:</span><br><span class="line">     stack=<span class="number">3</span>, locals=<span class="number">2</span>, args_size=<span class="number">1</span></span><br><span class="line">        0: new           #2                  // class java/lang/String</span><br><span class="line">        <span class="number">3</span>: dup</span><br><span class="line">        4: ldc           #3                  // String 123</span><br><span class="line">        6: invokespecial #4                  // Method java/lang/String.&quot;&lt;init&gt;&quot;:(Ljava/lang/String;)V</span><br><span class="line">        <span class="number">9</span>: astore_1</span><br><span class="line">       <span class="number">10</span>: <span class="keyword">return</span></span><br><span class="line">     LineNumberTable:</span><br><span class="line">       line <span class="number">11</span>: <span class="number">0</span></span><br><span class="line">       line <span class="number">12</span>: <span class="number">10</span></span><br><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<ol>
+<li>先执行<code>new</code>指令，<code>#2</code>表示的是常量池中的类型信息，即<code>class java/lang/String</code>，且必须是CONSTANT_Class_info型。</li>
+<li>JVM会为这个新对象分配一个空间，新对象的属性值是默认值，然后执行新对象的<code>objectref</code>引用压入栈顶。</li>
+<li><code>new</code>指令执行后，得到的对象还没有初始化，所以这个新对象没有初始化完成，所以这时候不应该赋值给s变量，应该先调用构造函数初始化类，然后将<code>objectref</code>引用复制一份，在新对象初始化完成后再将这个引用赋值给本地变量。通过<code>invokespecial</code>指令调用构造函数，若构造函数需要参数，则需要先将参数压入栈中。</li>
+<li><code>astore_1</code>是在类创建完成后，将引用复制给本地变量s。</li>
+</ol>
+<p><strong style='color:red'>堆用来存放对象，栈用来执行程序</strong>。而在C/C++中所有方法的调用都是通过栈来进行的，所有的局部局部变量、行参都是从栈中的。堆在运行中请求操作系统分配内存，由于操作系统管理内存分配，所以分配和销毁都会占用时间，因此堆的效率较低。但是堆的优点是编译器不需要知道从堆内分配多少存储空间，也不需要知道对象的生存期，因此堆具有很大的灵活性。Java是面向对象的，具有多态性，多态变量所需要的存储空间只有在运行时创建了对象之后才能确定。</p>
+<h2 id="6-JVM回收策略"><a href="#6-JVM回收策略" class="headerlink" title="6. JVM回收策略"></a>6. JVM回收策略</h2><p>Java分配内存的方式：静态内存分配，动态内存分配</p>
+<h3 id="1-静态内存分配回收"><a href="#1-静态内存分配回收" class="headerlink" title="1. 静态内存分配回收"></a>1. 静态内存分配回收</h3><p>Java中的静态内存分配指的是在Java被编译时就已经能够准确确定需要的内存空间，当程序被加载时系统一次性分配内存。这些内存在执行过程中不会发生变化，直到程序执行结束时才会被回收。<strong style='color:red'>Java的类和方法中的局部变量包括原生数据类型和对象的引用都是静态分配内存的</strong>。如下:对象的引用一般占4个字节，l占8个字节。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">String s = <span class="string">&quot;123&quot;</span>;</span><br><span class="line"><span class="keyword">long</span> l = <span class="number">1</span>;</span><br><span class="line">Long lg = <span class="number">1L</span>;</span><br></pre></td></tr></table></figure>
+
+<p>静态内存空间当代码块运行结束时回收，其是在Java栈上分配的，在方法运行结束时，对应的栈桢也会被撤销。</p>
+<h3 id="2-动态内存分配和回收"><a href="#2-动态内存分配和回收" class="headerlink" title="2. 动态内存分配和回收"></a>2. 动态内存分配和回收</h3><p>Java中对象存储在堆中，是可以被共享的，当方法执行结束也不一定会消失。Java中对象的内存分配是动态的，即在程序执行时才知道要分配的存储空间大小，而不是在编译时就可以确定的。对象何时被回收也不确定的，需要等到对象不再被使用时才可以被回收。</p>
+<p>内存的分配时在创建对象时发生的，而内存的回收是以对象不再引用为前提。对象真正的回收是垃圾收集器完成的。</p>
+<h3 id="3-垃圾回收"><a href="#3-垃圾回收" class="headerlink" title="3 垃圾回收"></a>3 垃圾回收</h3><p><a href="https://www.effiu.cn/blog/2019/06/10/jvm/3_gc_memory_allocation/">垃圾收集器与内存分配策略</a></p>
+<h2 id="7-内存问题分析"><a href="#7-内存问题分析" class="headerlink" title="7. 内存问题分析"></a>7. 内存问题分析</h2><p>见《深入分析Java Web技术内幕》page 233</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/05/web/7-JVM%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84%E4%B8%8E%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F/" rel="prev" title="JVM体系结构与工作方式">
+      <i class="fa fa-chevron-left"></i> JVM体系结构与工作方式
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/12/web/9-servlet/" rel="next" title="Servlet工作原理">
+      Servlet工作原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

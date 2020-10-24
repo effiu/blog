@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Redis有5种数据结构，分别为：string(字符串)、list(列表)、set(集合)、hash(哈希)、zset(有序集合)。 Redis所有的数据结构都是以唯一的key字符串作为名称，然后通过这个唯一key值获取对应的value数据，不同类型的数据结构的差异就在于value的结构不一样。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis基础数据结构">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/19/redis/1_basic_structure/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Redis有5种数据结构，分别为：string(字符串)、list(列表)、set(集合)、hash(哈希)、zset(有序集合)。 Redis所有的数据结构都是以唯一的key字符串作为名称，然后通过这个唯一key值获取对应的value数据，不同类型的数据结构的差异就在于value的结构不一样。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/01.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/02.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/03.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/04.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/05.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/06.png">
+<meta property="article:published_time" content="2019-08-19T15:16:00.000Z">
+<meta property="article:modified_time" content="2019-08-22T13:57:28.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/redis/01.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/19/redis/1_basic_structure/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Redis基础数据结构 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-string-%E5%AD%97%E7%AC%A6%E4%B8%B2"><span class="nav-number">1.</span> <span class="nav-text">1. string(字符串)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-list-%E5%88%97%E8%A1%A8"><span class="nav-number">2.</span> <span class="nav-text">2. list(列表)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-hash-%E5%AD%97%E5%85%B8"><span class="nav-number">3.</span> <span class="nav-text">3. hash(字典)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-set-%E9%9B%86%E5%90%88"><span class="nav-number">4.</span> <span class="nav-text">4. set(集合)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-zset-%E6%9C%89%E5%BA%8F%E9%9B%86%E5%90%88"><span class="nav-number">5.</span> <span class="nav-text">5. zset(有序集合)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-%E5%AE%B9%E5%99%A8%E5%9E%8B%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E7%9A%84%E9%80%9A%E7%94%A8%E8%A7%84%E5%88%99"><span class="nav-number">6.</span> <span class="nav-text">6. 容器型数据结构的通用规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7-%E8%BF%87%E6%9C%9F%E6%97%B6%E9%97%B4"><span class="nav-number">7.</span> <span class="nav-text">7. 过期时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#8-%E6%89%A9%E5%B1%95"><span class="nav-number">8.</span> <span class="nav-text">8. 扩展</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E5%8E%8B%E7%BC%A9%E5%88%97%E8%A1%A8"><span class="nav-number">8.1.</span> <span class="nav-text">1. 压缩列表</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/19/redis/1_basic_structure/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Redis基础数据结构
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-19 23:16 23:16:00" itemprop="dateCreated datePublished" datetime="2019-08-19T23:16:00+08:00">2019-08-19 23:16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-22 21:57 21:57:28" itemprop="dateModified" datetime="2019-08-22T21:57:28+08:00">2019-08-22 21:57</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/19/redis/1_basic_structure/" class="post-meta-item leancloud_visitors" data-flag-title="Redis基础数据结构" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/19/redis/1_basic_structure/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/19/redis/1_basic_structure/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Redis有5种数据结构，分别为：<code>string</code>(字符串)、<code>list</code>(列表)、<code>set</code>(集合)、<code>hash</code>(哈希)、<code>zset</code>(有序集合)。</p>
+<p>Redis所有的数据结构都是以唯一的key字符串作为名称，然后通过这个唯一key值获取对应的value数据，不同类型的数据结构的差异就在于value的结构不一样。</p>
+<a id="more"></a>
+
+<h3 id="1-string-字符串"><a href="#1-string-字符串" class="headerlink" title="1. string(字符串)"></a>1. string(字符串)</h3><p><strong>string字符串</strong>是Redis中最简单的数据结构。字符串使用非常广泛，常见的是缓存用户信息。将用户信息结构体使用JSON序列化成为字符串，然后将序列化后的字符串放入Redis中缓存。获取用户信息经过一次反序列化的过程。</p>
+<p>Redis字符串是动态字符串，是可以修改的字符串，内部结构实现类似于Java的ArrayList，采用预分配冗余空间的方式减少内存的频繁分配。字符串实际分配的空间一般高于字符串长度。字符串长度小于1M时，扩容都是加倍现有空间，超过1M扩容只会多扩1M空间，字符串最大长度为512M。</p>
+<ul>
+<li><p>常用命令：</p>
+<ul>
+<li><code>set key value</code></li>
+<li><code>get key</code></li>
+<li><code>exists key</code>，存在返回1</li>
+<li><code>del key</code>，成功返回1</li>
+</ul>
+</li>
+<li><p>字符串相关</p>
+<ul>
+<li><code>strlen key</code>，字符串长度</li>
+<li><code>getrange key 28 34</code>，获取28到34位的字符串</li>
+<li><code>setrange key 28 value</code>，覆盖28位及以后字符串(具体根据value长度)</li>
+<li><code>append key value1</code>，在原字符串后追加value1</li>
+</ul>
+</li>
+<li><p>批量对多个字符串读写，节省网络耗时开销</p>
+<ul>
+<li><code>mget key1 key2</code>，返回列表</li>
+<li><code>mset key1 value1 key2 value2</code></li>
+</ul>
+</li>
+<li><p>过期和<code>set</code>命令扩展，可以对key设置过期时间，一般用来控制缓存失效时间</p>
+<ul>
+<li><code>expire key 5</code>，5s后过期</li>
+<li><code>setex key 5</code>，等价于<code>set + expire</code></li>
+<li><code>setnx key value</code>，若key不存在则执行set创建</li>
+</ul>
+</li>
+<li><p>计数，value为整数时，可以进行则增操作，为<code>Long.MIN_VALUE</code>到<code>Long.MAX_VALUE</code>之间</p>
+<ul>
+<li><code>incr key</code>，自增1</li>
+<li><code>incrby key 5</code>，增加5</li>
+<li><code>incrby key -5</code>，减少5</li>
+<li><code>decrby key 5</code>，减少5</li>
+</ul>
+</li>
+</ul>
+<p>字符串由多个字节组成，每个字节由8bit组成，所以一个字符串就是很多bit。</p>
+<h3 id="2-list-列表"><a href="#2-list-列表" class="headerlink" title="2. list(列表)"></a>2. list(列表)</h3><p>Redis中的列表相当于Java中的LinkedList，是双向链表。list的插入和删除操作非常快，时间复杂度为O(1)，索引定位很慢为O(n)。</p>
+<p>链表元素使用自然数<code>1,2,3,4,5····n-1</code>表示，还可以使用负数<code>-1,-2 ····· -n</code>表示，<code>-1</code>表示最后一个</p>
+<p>Redis的列表结构常用来做异步队列使用。将需要延后处理的任务结构体系序列化成字符串放到Redis的list结构中，另一个线程从这个列表中轮询数据进行处理。</p>
+<ul>
+<li><p>常用命令：</p>
+<ul>
+<li><code>rpush key value</code>，右侧插入</li>
+<li><code>rpop key</code>，右侧弹出</li>
+<li><code>lpush key value</code>，左侧插入</li>
+<li><code>lpop key</code>，左侧弹出</li>
+<li><code>llen key</code>，list的长度</li>
+</ul>
+<blockquote>
+<p>可以使用上述命令构建队列和堆栈</p>
+</blockquote>
+</li>
+<li><p>满操作</p>
+<ul>
+<li><code>lindex key index</code>，相当于Java链表中的<code>get(int)</code>方法，需要遍历链表，性能随着index增大而变差</li>
+<li><code>ltrim key start_index end_index</code>，保留<code>start_index</code>到<code>end_index</code>之间的数据，其他丢弃。</li>
+</ul>
+</li>
+</ul>
+<p>Redis的list数据结构不是简单的<code>LinkedList</code>，而是快速链表quickList的一个结构。在列表元素较少时使用一块连续的内存存储<code>ziplist</code>，即压缩列表。将所有元素紧挨着一起存储，分配的是一块连续内存。数量较多时会改成quicklist。因为普通链表需要附加指针空间太大，比较浪费空间，且会加重内存碎片化。例如列表内存储的是<code>int</code>，然而从结构上还需要<code>prev</code>和<code>next</code>两个指针。所以Redis将链表和<code>ziplist</code>结合起来组成了quicklist。即将多个<code>ziplist</code>使用双向指针串起来。既满足快速插入删除性能，由不会出现太大冗余空间。</p>
+<p><img src="https://images.effiu.cn/blog/redis/01.png" alt="quicklist"></p>
+<h3 id="3-hash-字典"><a href="#3-hash-字典" class="headerlink" title="3. hash(字典)"></a>3. hash(字典)</h3><p>Redis中的hash相当于Java中的HashMap，是无序字典。其内部实现是数组+链表。第一维hash数组碰撞时，就会将碰撞的元素使用链表串接起来。</p>
+<p><img src="https://images.effiu.cn/blog/redis/02.png" alt="quicklist"></p>
+<p>Redis字典的值只能是字符串，另外rehash的方式有区别。Java的<code>HashMap</code>在字典很大时，rehash是耗时操作，需要一次性全部rehash。Redis为了提高性能，采用了渐进式的rehash策略。渐进式rehash会在rehash时，保留新旧两个hash结构，查询时同时查询两个hash结构，然后在后续的定时任务中以及hash操作指令中，循序渐进地将旧hash内容迁移到新hash结构中。当迁移完成后，就会使用新的hash结构取而代之，旧的hash在移除完最后一个元素后，会自动被删除。</p>
+<p><img src="https://images.effiu.cn/blog/redis/03.png" alt="rehash策略"></p>
+<p>hash结构也可以用来存储用户信息，不同于字符串一次性需要全部序列化整个对象，hash可以对用户结构中每个字段单独存储，这样也可以单独获取部分信息。以整个字符串的形式缓存用户信息就只能一次性全部读取，浪费网络流量。</p>
+<p>hash结构的存储消耗要高于单个字符串，使用hash还是字符串，可以根据以下判断：</p>
+<ul>
+<li>使用简单的字符串，适用于大多数访问中使用大多数字段</li>
+<li>使用hash，大多数访问中仅使用单个字段</li>
+</ul>
+<p>常用命令：</p>
+<ul>
+<li><code>hset key key1 value1</code>，value若包含空格，要用引号括起来</li>
+<li><code>hgetall key</code>，返回结果是 key和value间隔出现。</li>
+<li><code>hlen key</code></li>
+<li><code>hget key key1</code></li>
+<li><code>hmset key key1 value1 key2 value2</code>，批量set</li>
+<li><code>hincrby key key1 1</code>，key中key1增加1</li>
+</ul>
+<h3 id="4-set-集合"><a href="#4-set-集合" class="headerlink" title="4. set(集合)"></a>4. set(集合)</h3><p>Redis的set集合相当于Java中的<code>HashSet</code>，内部键值对是无序唯一的，内部实现相当于一个特殊字典，字典中所有value均为<code>NULL</code>。set集合中最后一个元素移除后，数据自动删除，内存被回收。</p>
+<p>set结构可以用来存储活动中奖用户的id，因为有去重功能，可以保证同一用户不会中奖两次</p>
+<p>常用命令：</p>
+<ul>
+<li><code>sadd key value1</code>，成功返回1，已存在返回0</li>
+<li><code>sadd key value2 value3</code>，返回成功的个数</li>
+<li><code>smembers key</code></li>
+<li><code>sismember key value1</code>，查询某个value1是否存在</li>
+<li><code>scard key</code></li>
+<li><code>spop key</code>，弹出一个</li>
+</ul>
+<h3 id="5-zset-有序集合"><a href="#5-zset-有序集合" class="headerlink" title="5. zset(有序集合)"></a>5. zset(有序集合)</h3><p>zset是Redis中最有特色的数据结构，类似于Java中的<code>SortedSet</code>和<code>HashMap</code>的结合体。zset其是一个set，保证了内部value的唯一性，还为每个value赋值了一个score，代表这个value的排序权重。内部实现是一种跳跃列表</p>
+<p>zset可以用来存储学生成绩，value是学生id，score是学生分数，可以对成绩按分数进行排序就可以看到他的名次</p>
+<p>常用命令：</p>
+<ul>
+<li><code>zadd key score value</code></li>
+<li><code>zrange key 0 -1</code>，按score排序列出，参数区间为排名范围</li>
+<li><code>zrevrange key 0 -1</code>，按score逆序列出，参数区间为排名范围</li>
+<li><code>zcard key</code>，zset集合内成员数</li>
+<li><code>zscore key value</code>，指定value的score</li>
+<li><code>zrank key value</code>，指定value的排名</li>
+<li><code>zrangebyscore key 0 10</code>，根据score遍历zset集合</li>
+<li><code>zrangebyscore books -inf 8.91 withscores</code>，<code>-inf</code>即infinite，无穷大的意思，返回结果为value、score相间输出</li>
+<li><code>zrem key value</code>，移除指定value</li>
+</ul>
+<p>zset内部的排序功能是通过跳跃列表数据结构实现的，结构比较复杂。zset要支持随机的插入和删除，所以不能用数组，只能用链表表示。</p>
+<p><img src="https://images.effiu.cn/blog/redis/04.png" alt="链表"></p>
+<p>需要这个链表按照score排序，当新元素插入时，要定位到特定位置的插入点，保证链表有序，但是链表定位插入点需要遍历，不能快速定位，所以有了<strong>跳跃列表</strong>。</p>
+<p><img src="https://images.effiu.cn/blog/redis/05.png" alt="链表"></p>
+<p>最下面一层所有元素都会串起来，然后每隔几个元素挑选出一个代表，再将这几个代表使用另外一级指针串起来，在这些代表里挑出二级代表，再串起来。</p>
+<p><strong>跳跃列表</strong>，其内部元素可能“身兼数职”，同时处于多层，可以快速在不同橙子之间进行跳跃。</p>
+<p>定位插入点时，先在顶层定位，然后下潜到下一级定位，一直下潜到最底层找到合适的位置，将新元素插入进去。跳跃列表采取一个随机策略来决定新元素可以兼职到几层。例如：</p>
+<p>首先，L0层是100%，L1层只有50%的概率，L2层只有25%的概率，L3层只有12.5%的概率，一直随机到L31层。列表中的元素越多，能够深入的层次越深。</p>
+<h3 id="6-容器型数据结构的通用规则"><a href="#6-容器型数据结构的通用规则" class="headerlink" title="6. 容器型数据结构的通用规则"></a>6. 容器型数据结构的通用规则</h3><p>list/set/hash/zset都是容器型数据结构，其共享下面两条通用规则：</p>
+<ul>
+<li>create if not exist，容器不存在则创建。</li>
+<li>drop if no elements，容器内没有元素，立即删除容器</li>
+</ul>
+<h3 id="7-过期时间"><a href="#7-过期时间" class="headerlink" title="7. 过期时间"></a>7. 过期时间</h3><p>Redis所有数据结构都可以设置过期时间。过期时间是以对象为单位(key)。当设置过期时间后，使用set方法修改后，过期时间会消失。</p>
+<h3 id="8-扩展"><a href="#8-扩展" class="headerlink" title="8. 扩展"></a>8. 扩展</h3><h4 id="1-压缩列表"><a href="#1-压缩列表" class="headerlink" title="1. 压缩列表"></a>1. 压缩列表</h4><p>压缩列表是列表键和哈希键的底层实现之一，为了优化数据存储，列表、哈希、有序集合底层实现都使用了压缩列表</p>
+<ul>
+<li>当一个列表键只包含少量列表项，且每个列表项要么就是小整数值，要么就是长度比较短的字符串，Redis就会使用压缩列表来做列表键的底层实现。</li>
+<li>当一个哈希键只包含少量键时，且每个键值对的键和值要么就是小整数值，要么是长度较短的字符串时，那么Redis就会使用压缩列表来做哈希键的底层实现</li>
+</ul>
+<p>压缩列表是Redis为了节省内存开发的，由一系列特殊编码的连续内存块组成的顺序型数据结构，一个压缩列表包含多个节点，每个节点可以保存一个字节数组或一个整数值。</p>
+<p><img src="https://images.effiu.cn/blog/redis/06.png" alt="压缩列表"></p>
+<p>压缩列表各个部分说明如下：</p>
+<table>
+<thead>
+<tr>
+<th align="center">属性</th>
+<th align="center">类型</th>
+<th align="center">长度</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center"><code>zlbytes</code></td>
+<td align="center"><code>unit32_t</code></td>
+<td align="center">4</td>
+<td>记录整个压缩列表的长度：在对压缩列表进行内存重分配或则计算zlend的位置时使用</td>
+</tr>
+<tr>
+<td align="center"><code>zltail</code></td>
+<td align="center"><code>unit32_t</code></td>
+<td align="center">4</td>
+<td>记录压缩列表表尾节点距离压缩列表起始地址的偏移量。通过该偏移量可以直接访问压缩列表尾节点的地址</td>
+</tr>
+<tr>
+<td align="center"><code>zlen</code></td>
+<td align="center"><code>unit16_t</code></td>
+<td align="center">2</td>
+<td>记录压缩列表包含的节点数：当该值小于<code>unit16_t</code>的最大值(65536)时，该属性的值就是压缩列表包含的节点数量，大于时，节点的真实属性需要遍历整个压缩列表才能计算出</td>
+</tr>
+<tr>
+<td align="center"><code>entryX</code></td>
+<td align="center">列表节点</td>
+<td align="center"></td>
+<td>压缩列表包含的各个节点，节点的长度由节点保存的内容决定</td>
+</tr>
+<tr>
+<td align="center"><code>zlend</code></td>
+<td align="center"><code>unit8_t</code></td>
+<td align="center">1</td>
+<td>特殊值<code>0xFF</code>十进制的255，用于标记压缩列表的末端</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>Reids文档-<a target="_blank" rel="noopener" href="http://redisbook.com/preview/ziplist/list.html">压缩列表</a></p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/Redis/" rel="tag"># Redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/19/mysql/11_lock/" rel="prev" title="MySQL中的锁">
+      <i class="fa fa-chevron-left"></i> MySQL中的锁
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/19/redis/2_distribute_lock/" rel="next" title="Redis分布式锁">
+      Redis分布式锁 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

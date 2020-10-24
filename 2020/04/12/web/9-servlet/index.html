@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Servlet是如何工作的 一个Web工程在Servlet容器中是如何启动的 Servlet容器如何解析在web.xml中定义的Servlet 用户的请求如何被分配给指定的Servlet Servlet容器如何管理Servlet生命周期    未阅读源码，需要阅读源码加深理解">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Servlet工作原理">
+<meta property="og:url" content="https://www.effiu.cn/2020/04/12/web/9-servlet/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Servlet是如何工作的 一个Web工程在Servlet容器中是如何启动的 Servlet容器如何解析在web.xml中定义的Servlet 用户的请求如何被分配给指定的Servlet Servlet容器如何管理Servlet生命周期    未阅读源码，需要阅读源码加深理解">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/50.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/51.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/52.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/53.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/54.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/55.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/56.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/57.png">
+<meta property="article:published_time" content="2020-04-12T12:28:00.000Z">
+<meta property="article:modified_time" content="2020-04-13T14:49:12.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/50.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/04/12/web/9-servlet/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Servlet工作原理 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-Servlet%E5%AE%B9%E5%99%A8"><span class="nav-number">1.</span> <span class="nav-text">1. Servlet容器</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Servlet%E5%AE%B9%E5%99%A8%E5%90%AF%E5%8A%A8%E8%BF%87%E7%A8%8B"><span class="nav-number">1.1.</span> <span class="nav-text">1. Servlet容器启动过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Web%E5%BA%94%E7%94%A8%E7%9A%84%E5%88%9D%E5%A7%8B%E5%8C%96%E5%B7%A5%E4%BD%9C"><span class="nav-number">1.2.</span> <span class="nav-text">2. Web应用的初始化工作</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E5%88%9B%E5%BB%BAServlet%E5%AE%9E%E4%BE%8B"><span class="nav-number">2.</span> <span class="nav-text">2. 创建Servlet实例</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E5%88%9B%E5%BB%BAServlet"><span class="nav-number">2.1.</span> <span class="nav-text">1. 创建Servlet</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%88%9D%E5%A7%8B%E5%8C%96Servlet"><span class="nav-number">2.2.</span> <span class="nav-text">2. 初始化Servlet</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Servlet%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84"><span class="nav-number">3.</span> <span class="nav-text">3. Servlet体系结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Servlet%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B"><span class="nav-number">4.</span> <span class="nav-text">4. Servlet工作流程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-Servlet%E4%B8%AD%E7%9A%84Listener"><span class="nav-number">5.</span> <span class="nav-text">5. Servlet中的Listener</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-Servlet%E4%B8%AD%E7%9A%84Filter"><span class="nav-number">6.</span> <span class="nav-text">6. Servlet中的Filter</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-Servlet%E4%B8%AD%E7%9A%84url-pattern"><span class="nav-number">7.</span> <span class="nav-text">7. Servlet中的url-pattern</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/04/12/web/9-servlet/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Servlet工作原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-04-12 20:28 20:28:00" itemprop="dateCreated datePublished" datetime="2020-04-12T20:28:00+08:00">2020-04-12 20:28</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-04-13 22:49 22:49:12" itemprop="dateModified" datetime="2020-04-13T22:49:12+08:00">2020-04-13 22:49</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/04/12/web/9-servlet/" class="post-meta-item leancloud_visitors" data-flag-title="Servlet工作原理" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/04/12/web/9-servlet/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/04/12/web/9-servlet/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <ul>
+<li>Servlet是如何工作的</li>
+<li>一个Web工程在Servlet容器中是如何启动的</li>
+<li>Servlet容器如何解析在<code>web.xml</code>中定义的Servlet</li>
+<li>用户的请求如何被分配给指定的Servlet</li>
+<li>Servlet容器如何管理Servlet生命周期</li>
+</ul>
+<ul>
+<li><input disabled="" type="checkbox"> 未阅读源码，需要阅读源码加深理解</li>
+</ul>
+<a id="more"></a>
+
+<h2 id="1-Servlet容器"><a href="#1-Servlet容器" class="headerlink" title="1. Servlet容器"></a>1. Servlet容器</h2><p><strong>Servlet</strong>容器是一个独立发展的标准化产品，目前有很多种，例如:<strong>Tomcat</strong>、<strong>Jetty</strong>等。</p>
+<p><strong>Tomcat</strong>容器等级中，<strong>Context</strong>容器直接管理<strong>Servlet</strong>在容器中的包装类<strong>Wrapper</strong>。</p>
+<p><img src="https://images.effiu.cn/blog/web/50.png" alt="Tomcat容器模型"></p>
+<p>一个<strong>Context</strong>对应一个Web工程。通过观察<code>server.xml</code>配置文件可以验证上图:</p>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&lt;?xml version=&#x27;1.0&#x27; encoding=&#x27;utf-8&#x27;?&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">Server</span> <span class="attr">port</span>=<span class="string">&quot;8005&quot;</span> <span class="attr">shutdown</span>=<span class="string">&quot;SHUTDOWN&quot;</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Listener</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.startup.VersionLoggerListener&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Listener</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.core.AprLifecycleListener&quot;</span> <span class="attr">SSLEngine</span>=<span class="string">&quot;on&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Listener</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.core.JreMemoryLeakPreventionListener&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Listener</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.mbeans.GlobalResourcesLifecycleListener&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Listener</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.core.ThreadLocalLeakPreventionListener&quot;</span> /&gt;</span></span><br><span class="line">  </span><br><span class="line">  <span class="tag">&lt;<span class="name">GlobalNamingResources</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">Resource</span> <span class="attr">name</span>=<span class="string">&quot;UserDatabase&quot;</span> <span class="attr">auth</span>=<span class="string">&quot;Container&quot;</span></span></span><br><span class="line"><span class="tag">              <span class="attr">type</span>=<span class="string">&quot;org.apache.catalina.UserDatabase&quot;</span></span></span><br><span class="line"><span class="tag">              <span class="attr">description</span>=<span class="string">&quot;User database that can be updated and saved&quot;</span></span></span><br><span class="line"><span class="tag">              <span class="attr">factory</span>=<span class="string">&quot;org.apache.catalina.users.MemoryUserDatabaseFactory&quot;</span></span></span><br><span class="line"><span class="tag">              <span class="attr">pathname</span>=<span class="string">&quot;conf/tomcat-users.xml&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">GlobalNamingResources</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">Service</span> <span class="attr">name</span>=<span class="string">&quot;Catalina&quot;</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">Connector</span> <span class="attr">port</span>=<span class="string">&quot;8080&quot;</span> <span class="attr">protocol</span>=<span class="string">&quot;HTTP/1.1&quot;</span></span></span><br><span class="line"><span class="tag">               <span class="attr">connectionTimeout</span>=<span class="string">&quot;20000&quot;</span></span></span><br><span class="line"><span class="tag">               <span class="attr">redirectPort</span>=<span class="string">&quot;8443&quot;</span> /&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">Connector</span> <span class="attr">port</span>=<span class="string">&quot;8009&quot;</span> <span class="attr">protocol</span>=<span class="string">&quot;AJP/1.3&quot;</span> <span class="attr">redirectPort</span>=<span class="string">&quot;8443&quot;</span> /&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">Engine</span> <span class="attr">name</span>=<span class="string">&quot;Catalina&quot;</span> <span class="attr">defaultHost</span>=<span class="string">&quot;localhost&quot;</span>&gt;</span></span><br><span class="line">      <span class="tag">&lt;<span class="name">Realm</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.realm.LockOutRealm&quot;</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">Realm</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.realm.UserDatabaseRealm&quot;</span></span></span><br><span class="line"><span class="tag">               <span class="attr">resourceName</span>=<span class="string">&quot;UserDatabase&quot;</span>/&gt;</span></span><br><span class="line">      <span class="tag">&lt;/<span class="name">Realm</span>&gt;</span></span><br><span class="line">      <span class="tag">&lt;<span class="name">Host</span> <span class="attr">name</span>=<span class="string">&quot;localhost&quot;</span>  <span class="attr">appBase</span>=<span class="string">&quot;webapps&quot;</span></span></span><br><span class="line"><span class="tag">            <span class="attr">unpackWARs</span>=<span class="string">&quot;true&quot;</span> <span class="attr">autoDeploy</span>=<span class="string">&quot;true&quot;</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">Valve</span> <span class="attr">className</span>=<span class="string">&quot;org.apache.catalina.valves.AccessLogValve&quot;</span> <span class="attr">directory</span>=<span class="string">&quot;logs&quot;</span></span></span><br><span class="line"><span class="tag">               <span class="attr">prefix</span>=<span class="string">&quot;localhost_access_log&quot;</span> <span class="attr">suffix</span>=<span class="string">&quot;.txt&quot;</span></span></span><br><span class="line"><span class="tag">               <span class="attr">pattern</span>=<span class="string">&quot;%h %l %u %t <span class="symbol">&amp;quot;</span>%r<span class="symbol">&amp;quot;</span> %s %b&quot;</span> /&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">Context</span> <span class="attr">path</span>=<span class="string">&quot;/path&quot;</span> <span class="attr">docBase</span>=<span class="string">&quot;/projects&quot;</span> <span class="attr">reloadable</span>=<span class="string">&quot;true&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">Context</span>&gt;</span></span><br><span class="line">      <span class="tag">&lt;/<span class="name">Host</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">Engine</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">Service</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">Server</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="1-Servlet容器启动过程"><a href="#1-Servlet容器启动过程" class="headerlink" title="1. Servlet容器启动过程"></a>1. Servlet容器启动过程</h3><p><strong>Tomcat 7</strong>有启动类<code>org.apache.catalina.startup.Tomcat</code>。创建一个实例对象并调用<code>start</code>方法可以启动<strong>Tomcat</strong>，还可以通过该对象修改启动参数，例如动态增加<strong>Context</strong>、<strong>Servlet</strong>等。</p>
+<p>一个Web应用对应一个<strong>Context</strong>上下文。每个Web应用都会创建一个<strong>StandardContext</strong>容器，且其会有一些参数，<code>path</code>、<code>docBase</code>等。<code>ContextConfig</code>负责整个Web应用配置的解析工作。</p>
+<p><strong>Tomcat</strong>的启动逻辑是基于观察者模式设计的，所有的容器都会继承<code>Lifecycle</code>接，其管理着容器的整个生命周期，所有容器的修改和状态的改变都会由它去通知已经注册的观察者(Listener)。</p>
+<p><img src="https://images.effiu.cn/blog/web/51.png" alt="Tomcat的启动时序图"></p>
+<p>重点是<code>StandardContext</code>的启动过程。</p>
+<p>当<code>Context</code>容器的初始化状态为init时，添加到Context容器的Listener将会被调用。<code>ContextConfig</code>继承了<code>LifecycleListener</code>接口，其是在调用<code>Tomcat.addWebapp</code>时被加入到<code>StandardContext</code>容器中的。<code>ContextConfig</code>类会负责整个Web应用的配置文件解析工作。</p>
+<p><code>ContextConfig.init</code>主要工作如下：</p>
+<ul>
+<li>创建用于解析XML配置文件的<code>contextDigester</code>对象</li>
+<li>读取默认的<code>context.xml</code>配置文件，若存在则解析</li>
+<li>读取默认的<strong>Host</strong>配置文件，若存在则解析</li>
+<li>读取默认的<strong>Context</strong>自身的配置文件，若存在则解析</li>
+<li>设置<strong>Context</strong>的<strong>docBase</strong>等信息。</li>
+</ul>
+<p><code>init</code>方法后，Context容器会执行<code>startInternal</code>方法，主要如下：</p>
+<ul>
+<li>创建读取资源文件的对象</li>
+<li>创建ClassLoader对象</li>
+<li>设置应用的工作目录</li>
+<li>启动相关辅助类，如logger、realm、resources等</li>
+<li>修改启动状态，通知感兴趣的观察者(Web应用配置)</li>
+<li>子容器的初始化</li>
+<li>获取ServletContext并设置必要的参数</li>
+<li>初始化<code>load on startup</code>的Servlet</li>
+</ul>
+<h3 id="2-Web应用的初始化工作"><a href="#2-Web应用的初始化工作" class="headerlink" title="2. Web应用的初始化工作"></a>2. Web应用的初始化工作</h3><p>Web应用的初始化是在<code>ContextConfig</code>的<code>configureStart</code>方法中实现的，应用初始化的主要工作是解析<code>web.xml</code>。</p>
+<ul>
+<li>首先找globalWebXml，文件搜索路径是engine的工作目录下的<code>org/papche/catalina/startup/NO_DEFAULT_XML</code>或者<code>cont/web.xml</code></li>
+<li>接着查找hostWebXml。文件路径是<code>System.getProperty(&quot;catalina.base&quot;)/conf/$&#123;EngineName&#125;/$&#123;HostName&#125;/web.xml.default</code>中</li>
+<li>之后是寻找应用的配置文件<code>examples/WEB-INF/web.xml</code>。</li>
+</ul>
+<p><code>web.xml</code>中的各个配置项将会被解析成相应的属性保存在<code>WebXml</code>对象中。若是<strong>Servlet 3.0</strong>，解析还将完成额外的工作，例如对annotations的支持等。</p>
+<p>然后会将WebXml对象中的属性设置到Context容器中，包括创建Servlet、filter、Listener等。见<code>ContextConfig.configureContext</code>，部分代码如下:</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (ServletDef servlet : webxml.getServlets().values()) &#123;</span><br><span class="line">    Wrapper wrapper = context.createWrapper();</span><br><span class="line">	<span class="comment">// load-on-startup</span></span><br><span class="line">    <span class="keyword">if</span> (servlet.getLoadOnStartup() != <span class="keyword">null</span>) &#123;</span><br><span class="line">        wrapper.setLoadOnStartup(servlet.getLoadOnStartup().intValue());</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (servlet.getEnabled() != <span class="keyword">null</span>) &#123;</span><br><span class="line">        wrapper.setEnabled(servlet.getEnabled().booleanValue());</span><br><span class="line">    &#125;</span><br><span class="line">    wrapper.setName(servlet.getServletName());</span><br><span class="line">    Map&lt;String,String&gt; params = servlet.getParameterMap();</span><br><span class="line">    <span class="keyword">for</span> (Entry&lt;String, String&gt; entry : params.entrySet()) &#123;</span><br><span class="line">        wrapper.addInitParameter(entry.getKey(), entry.getValue());</span><br><span class="line">    &#125;</span><br><span class="line">    wrapper.setRunAs(servlet.getRunAs());</span><br><span class="line">    Set&lt;SecurityRoleRef&gt; roleRefs = servlet.getSecurityRoleRefs();</span><br><span class="line">    <span class="keyword">for</span> (SecurityRoleRef roleRef : roleRefs) &#123;</span><br><span class="line">        wrapper.addSecurityReference(</span><br><span class="line">            roleRef.getName(), roleRef.getLink());</span><br><span class="line">    &#125;</span><br><span class="line">    wrapper.setServletClass(servlet.getServletClass());</span><br><span class="line">    MultipartDef multipartdef = servlet.getMultipartDef();</span><br><span class="line">    <span class="keyword">if</span> (multipartdef != <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (multipartdef.getMaxFileSize() != <span class="keyword">null</span> &amp;&amp;</span><br><span class="line">            multipartdef.getMaxRequestSize()!= <span class="keyword">null</span> &amp;&amp;</span><br><span class="line">            multipartdef.getFileSizeThreshold() != <span class="keyword">null</span>) &#123;</span><br><span class="line">            wrapper.setMultipartConfigElement(<span class="keyword">new</span> MultipartConfigElement(</span><br><span class="line">                multipartdef.getLocation(),</span><br><span class="line">                Long.parseLong(multipartdef.getMaxFileSize()),</span><br><span class="line">                Long.parseLong(multipartdef.getMaxRequestSize()),</span><br><span class="line">                Integer.parseInt(</span><br><span class="line">                    multipartdef.getFileSizeThreshold())));</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            wrapper.setMultipartConfigElement(<span class="keyword">new</span> MultipartConfigElement(</span><br><span class="line">                multipartdef.getLocation()));</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (servlet.getAsyncSupported() != <span class="keyword">null</span>) &#123;</span><br><span class="line">        wrapper.setAsyncSupported(</span><br><span class="line">            servlet.getAsyncSupported().booleanValue());</span><br><span class="line">    &#125;</span><br><span class="line">    wrapper.setOverridable(servlet.isOverridable());</span><br><span class="line">    context.addChild(wrapper);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述是将<code>Servlet</code>包装成<strong>Context</strong>容器中的<code>StandardWrapper</code>的过程。这里<code>StandardWrapper</code>是<strong>Tomcat</strong>容器的一部分，具有容器的特性，而Servlet作为一个独立的Web开发标准，不应该强耦合在Tomcat中。其他所有的<code>web.xml</code>属性都被解析到<code>Context</code>中，<strong>Context</strong>容器才是真正运行<strong>Servlet</strong>的<strong>Servlet</strong>容器。</p>
+<h2 id="2-创建Servlet实例"><a href="#2-创建Servlet实例" class="headerlink" title="2. 创建Servlet实例"></a>2. 创建Servlet实例</h2><h3 id="1-创建Servlet"><a href="#1-创建Servlet" class="headerlink" title="1. 创建Servlet"></a>1. 创建Servlet</h3><p>在Context容器启动时会实例化一些<code>load-on-startup</code>大于0的Servlet，其在globalWebXml中。例如:<code>org.apache.catalina.servlets.DefaultServlet</code>和<code>org.apache.jasper.servlet.JspServlet</code>。</p>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">servlet</span>&gt;</span><span class="tag">&lt;/<span class="name">servlet</span>&gt;</span></span><br><span class="line">	<span class="tag">&lt;<span class="name">servlet-name</span>&gt;</span>default<span class="tag">&lt;/<span class="name">servlet-name</span>&gt;</span></span><br><span class="line">	<span class="tag">&lt;<span class="name">servlet-class</span>&gt;</span>org.apache.catalina.servlets.DefaultServlet<span class="tag">&lt;/<span class="name">servlet-class</span>&gt;</span></span><br><span class="line">	<span class="tag">&lt;<span class="name">init-param</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-name</span>&gt;</span>debug<span class="tag">&lt;/<span class="name">param-name</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-value</span>&gt;</span>0<span class="tag">&lt;/<span class="name">param-value</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">init-param</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">init-param</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-name</span>&gt;</span>listings<span class="tag">&lt;/<span class="name">param-name</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-value</span>&gt;</span>false<span class="tag">&lt;/<span class="name">param-value</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">init-param</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">load-on-startup</span>&gt;</span>1<span class="tag">&lt;/<span class="name">load-on-startup</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">servlet</span>&gt;</span></span><br><span class="line"></span><br><span class="line"><span class="tag">&lt;<span class="name">servlet</span>&gt;</span></span><br><span class="line">	<span class="tag">&lt;<span class="name">servlet-name</span>&gt;</span>jsp<span class="tag">&lt;/<span class="name">servlet-name</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">servlet-class</span>&gt;</span>org.apache.jasper.servlet.JspServlet<span class="tag">&lt;/<span class="name">servlet-class</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">init-param</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-name</span>&gt;</span>fork<span class="tag">&lt;/<span class="name">param-name</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-value</span>&gt;</span>false<span class="tag">&lt;/<span class="name">param-value</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">init-param</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">init-param</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-name</span>&gt;</span>xpoweredBy<span class="tag">&lt;/<span class="name">param-name</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">param-value</span>&gt;</span>false<span class="tag">&lt;/<span class="name">param-value</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">init-param</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">load-on-startup</span>&gt;</span>3<span class="tag">&lt;/<span class="name">load-on-startup</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">servlet</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>  其他在启动时实例化的类，例如：<code>org.apache.catalina.servlets.CGIServlet</code>和<code> org.apache.catalina.ssi.SSIServlet</code>等</p>
+</blockquote>
+<p>创建Servlet实例的方法是从<code>Wrapper.loadServlet</code>开始的，<code>loadServlet</code>方法要完成的就是获取<strong>servletClass</strong>，然后交给<code>InstanceManager</code>去创建一个基于<code>servletClass.class</code>的对象。若Servlet配置了<strong>jsp-file</strong>，那么servletClass就是<code>org.apache.jasper.servlet.JspServlet</code></p>
+<h3 id="2-初始化Servlet"><a href="#2-初始化Servlet" class="headerlink" title="2. 初始化Servlet"></a>2. 初始化Servlet</h3><p>初始化Servlet在<code>StandardWrapper</code>的<code>initServlet</code>方法中，主要代码如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span>( Globals.IS_SECURITY_ENABLED) &#123;</span><br><span class="line">    <span class="keyword">boolean</span> success = <span class="keyword">false</span>;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        Object[] args = <span class="keyword">new</span> Object[] &#123; facade &#125;;</span><br><span class="line">        <span class="comment">// init 方法</span></span><br><span class="line">        SecurityUtil.doAsPrivilege(<span class="string">&quot;init&quot;</span>,</span><br><span class="line">                                   servlet,</span><br><span class="line">                                   classType,</span><br><span class="line">                                   args);</span><br><span class="line">        success = <span class="keyword">true</span>;</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (!success) &#123;</span><br><span class="line">            <span class="comment">// destroy() will not be called, thus clear the reference now</span></span><br><span class="line">            SecurityUtil.remove(servlet);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// init方法</span></span><br><span class="line">    servlet.init(facade);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>其主要是调用Servlet的<code>init</code>方法，把包装了<code>StandardWrapper</code>对象的<code>StandardWrapperFacade</code>作为<code>ServletConfig</code>传给Servlet。</p>
+<p>实际上Servlet对象的初始化已经完成，但是在Servlet被<code>web.xml</code>解析到完成初始化，中间还有好多其他工作。例如，各种容器状态的转化引起的监听事件的处罚、访问权限的控制等。完整时序图如下：</p>
+<p><img src="https://images.effiu.cn/blog/web/52.png" alt="初始化Servlet时序图"></p>
+<h2 id="3-Servlet体系结构"><a href="#3-Servlet体系结构" class="headerlink" title="3. Servlet体系结构"></a>3. Servlet体系结构</h2><p>Servlet顶层类的关联图如下：</p>
+<p><img src="https://images.effiu.cn/blog/web/53.png" alt="Servlet顶层关系图"></p>
+<p>Servlet规范相关的类主要就是上面5个类，与Servlet运行相关的是<code>ServletConfig</code>、<code>ServletRequest</code>、<code>ServletResponse</code>，都是通过容器传递给Servlet的。<code>ServletConfig</code>是在Servlet初始化时完成的，后面两个是请求到达时调用Servlet的方法传递过来的。<code>ServletRequest</code>、<code>ServletResponse</code>主要的请求相关内容，<code>ServletConfig</code>则是Servlet的一些配置信息。<code>ServletContext</code>则是项目的配置信息。</p>
+<p>ServletConfig和ServletContext在Tomcat容器中的关系图：</p>
+<p><img src="https://images.effiu.cn/blog/web/54.png" alt="png"></p>
+<p>可以发现，<code>StandardWrapper</code>和<code>StandardWrapperFacade</code>都实现了<code>ServletConfig</code>接口。而<code>StandardWrapperFacade</code>是<code>StandardWrapper</code>的门面类，实际传递给Servlet的是门面类对象，这样可以保证从<code>StandardWapper</code>中拿到<code>ServletConfig</code>中规定的数据，而又不保留全部数据。</p>
+<p><code>ServletContext</code>也是同样的结构。都是利用门面模式暴露部分数据。例如，工作路径、容器支持的Servlet版本等信息</p>
+<p>在Servlet运行中传递的<code>ServletRequest</code>、<code>ServletResponse</code>可以被转化为<code>HttpServletRequest</code>和<code>HttpServletResponse</code>。</p>
+<p>Tomcat接到请求时会首先创建<code>org.apache.coyote.Request</code>、<code>org.apache.coyote.Response</code>，这是Tomcat内部使用的描述一次请求和响应的信息类，是一个轻量级的类，很小、易回收。接下来会交给一个用户线程去处理这个请求时又会创建<code>org.apache.catalina.connector.Request</code>和<code>org.apache.catalina.connector.Response</code>，这两个才是贯穿整个Servlet容器直到传给Servlet，传给Servlet的是Request和Response的门面类<code>RequestFacade</code>和<code>ResponseFacade</code>，也是基于封装容器中的数据使用的门面模式。</p>
+<p><img src="https://images.effiu.cn/blog/web/55.png" alt="Request和Response的转变过程"></p>
+<h2 id="4-Servlet工作流程"><a href="#4-Servlet工作流程" class="headerlink" title="4. Servlet工作流程"></a>4. Servlet工作流程</h2><p>用户从浏览器向服务器发送一个请求的url:<code>https://hostname:port/contextPaht/servletPath</code>。其中<code>hostname:port</code>用来建立TCP连接，后面的URL才是选择在服务器哪个子容器中的Servlet。</p>
+<p>Tomcat中存在一个影射类，<code>org.apache.catalina.mapper.Mapper</code>，其保存了Tomcat的Containner容器中所有自容器的信息，当<code>org.apache.catalina.connector.Request</code>进入Container容器之前，Mapper会根据这次请求的<strong>hostname</strong>和<strong>contextpath</strong>将其设置到Request的mappingData中去。</p>
+<p>Mapper中的映射关系是由<code>MapperListener</code>的<code>startInternal</code>方法完成的。如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">startInternal</span><span class="params">()</span> <span class="keyword">throws</span> LifecycleException </span>&#123;</span><br><span class="line"></span><br><span class="line">    setState(LifecycleState.STARTING);</span><br><span class="line"></span><br><span class="line">    Engine engine = service.getContainer();</span><br><span class="line">    <span class="keyword">if</span> (engine == <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    findDefaultHost();</span><br><span class="line">	<span class="comment">// 将MapperListener作为一个监听者添加到整个Container容器的每个自容器中，</span></span><br><span class="line">    <span class="comment">// 当任何一个子容器发生变化MapperListener都会被通知到，</span></span><br><span class="line">    <span class="comment">// 相应的保存容器关系的mapper对象也会被修改(containerEvent方法)</span></span><br><span class="line">    addListeners(engine);</span><br><span class="line"></span><br><span class="line">    Container[] conHosts = engine.findChildren();</span><br><span class="line">    <span class="keyword">for</span> (Container conHost : conHosts) &#123;</span><br><span class="line">        Host host = (Host) conHost;</span><br><span class="line">        <span class="keyword">if</span> (!LifecycleState.NEW.equals(host.getState())) &#123;</span><br><span class="line">            <span class="comment">// Registering the host will register the context and wrappers</span></span><br><span class="line">            registerHost(host);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// ···</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">addListeners</span><span class="params">(Container container)</span> </span>&#123;</span><br><span class="line">    container.addContainerListener(<span class="keyword">this</span>);</span><br><span class="line">    container.addLifecycleListener(<span class="keyword">this</span>);</span><br><span class="line">    <span class="keyword">for</span> (Container child : container.findChildren()) &#123;</span><br><span class="line">        addListeners(child);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后就是执行Servlet的方法(真正的业务代码)。通常自定义的Servlet并不会真正实现<code>javax.servlet.Servlet</code>接口，而是继承<code>HttpServlet</code>或者<code>GenericServlet</code>类，我们可以有选择的覆盖相应的方法去实现要完成的接口。</p>
+<p>当Servlet从Servlet容器中移除时，也表明Servlet的生命周期结束了，这时Servlet的destory方法将会被调用。</p>
+<h2 id="5-Servlet中的Listener"><a href="#5-Servlet中的Listener" class="headerlink" title="5. Servlet中的Listener"></a>5. Servlet中的Listener</h2><p>在整个Tomcat服务器中，Listener的应用非常广泛，是基于观察者模式设计的。Listener的设计为开发者提供了一种快捷的手段，可以方便的从纵向维度控制程序和数据。目前Servlet存在6中观察者接口，分别是：<code>EventListener</code>类型的<code>ServletContextAttributeListener</code>、<code>ServletRequestAttributeListener</code>、<code>ServletRequestListener</code>、<code>HttpSessionAttributeListener</code>和<code>LifecycleListener</code>类型的<code>ServletContextListener</code>和<code>HttpSessionListener</code>。实际上上述接口都继承了<code>EventListener</code>接口。</p>
+<p>这些Listener基本涵盖了整个Servlet生命周期中的所有事件，其可以配置在<code>web.xml</code>的<code>listener</code>标签中，也可以在应用程序中动态添加listener。例如，Spring的<code>org.springframework.web.context.ContextLoaderListener</code>就是实现了<code>ServletContextListener</code>。当容器加载时启动Spring容器。<code>ContextLoaderListener</code>在<code>contextInitialized</code>方法中初始化Spring容器。加载Spring容器的办法：</p>
+<ul>
+<li><code>web.xml</code>中的<code>context-param</code>中配置Spring的<code>applicationContext.xml</code>路径</li>
+<li>默认在<code>/WEB-INF/</code>路径下查找默认的Spring配置文件。</li>
+</ul>
+<h2 id="6-Servlet中的Filter"><a href="#6-Servlet中的Filter" class="headerlink" title="6. Servlet中的Filter"></a>6. Servlet中的Filter</h2><p>Filter是<code>web.xml</code>中另外一个常用配置项，其比Servlet更加灵活，不仅提供了<code>request</code>和<code>response</code>，还提供了一个<code>FilterChain</code>对象，其可以让我们更加灵活控制请求的流转。</p>
+<p><img src="https://images.effiu.cn/blog/web/56.png" alt="Filter相关类结构图"></p>
+<p><code>FilterConfig</code>和<code>FilterChain</code>的实现类分别是<code>ApplicationFilterConfig</code>和<code>ApplicationFilterChain</code>，而Filter的实现由用户自定义。Filter类中三个接口方法：</p>
+<ul>
+<li><code>init(FilterConfig)</code>，初始化接口。</li>
+<li><code>doFilter(ServletRequest, ServletResponse, FilterChain)</code>，在用户请求进来时会执行该方法，<code>FilterChain.doFilter</code>会进入下一链。</li>
+<li><code>destory()</code>，Filter容器销毁时，这个方法被调用</li>
+</ul>
+<p>Filter类的核心是<code>FilterChain</code>对象。其内部包含了到最终Servlet对象的所有Filter对象，这些对象保存在<code>ApplicationFilterChain</code>对象的filter数组中。在<code>FilterChain</code>链上每执行一个Filter对象，数组的当前计数都会+1，直到等于数组的长度，在所有filter执行后，才会执行最终的Servlet。</p>
+<p><img src="https://images.effiu.cn/blog/web/57.png" alt="Filter执行时序图"></p>
+<h2 id="7-Servlet中的url-pattern"><a href="#7-Servlet中的url-pattern" class="headerlink" title="7. Servlet中的url-pattern"></a>7. Servlet中的url-pattern</h2><p>在<code>web.xml</code>中每个Servlet、Filter都需要配置<code>&lt;url-pattern/&gt;</code>。</p>
+<ul>
+<li>Servlet的匹配是根据<code>org.apache.catalina.mapper.Mapper</code>类完成的，其会根据请求的URL匹配每个Servlet中配置的<code>&lt;url-pattern/&gt;</code></li>
+<li>Filter的匹配是在创建<code>ApplicationFilterChain</code>对象时进行的，它会把所有定义的Filter的<code>&lt;url-pattern&gt;</code>与当前的URL匹配，若匹配成功就将这个Filter保存到<code>ApplicationFilterChain</code>的filters数组中。</li>
+</ul>
+<p><code>web.xml</code>加载时，会首先检查<code>&lt;url-pattern/&gt;</code>是否符合规则，这是在<code>StandardContext</code>的<code>validateURLPattern</code>方法中完成的。<code>&lt;url-pattern/&gt;</code>的解析规则：</p>
+<ul>
+<li>精确匹配: 如<code>/foo.html</code>只会匹配<code>foo.html</code></li>
+<li>路径匹配: 如<code>/foo/*</code>会匹配所有以<code>foo</code>开头的URL</li>
+<li>后缀匹配: 如<code>*.html</code>会匹配所有以<code>html</code>结尾的URL</li>
+</ul>
+<p>对于Servlet来说，精确匹配 &gt; 最长路径匹配 &gt; 后缀匹配</p>
+<p>Filter的匹配规则在<code>ApplicationFilterFactory.matchFiltersURL</code>方法中定义。只要匹配成功就会加入到调用链中去。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/11/web/8-JVM%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/" rel="prev" title="JVM内存管理">
+      <i class="fa fa-chevron-left"></i> JVM内存管理
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/14/web/10-session-and-cookie/" rel="next" title="理解Session与Cookie">
+      理解Session与Cookie <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Java语言的编译期是一段“不确定”的操作过程。  前端编译器(编译器的前端)，把java文件转变成class文件的过程。例如：Sun的Javac、Eclipse JDT中的增量式编译器(ECJ)。 虚拟机的后端运行期编译器(JIT编译器，Just In Time Compiler)，把字节码转变为机器码的过程。例如：HotSpot VM的C1、C2编译器。 静态提前编译器(AOT编译器, Ahe">
+<meta property="og:type" content="article">
+<meta property="og:title" content="编译期优化">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/08/jvm/10_compile_optimization/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Java语言的编译期是一段“不确定”的操作过程。  前端编译器(编译器的前端)，把java文件转变成class文件的过程。例如：Sun的Javac、Eclipse JDT中的增量式编译器(ECJ)。 虚拟机的后端运行期编译器(JIT编译器，Just In Time Compiler)，把字节码转变为机器码的过程。例如：HotSpot VM的C1、C2编译器。 静态提前编译器(AOT编译器, Ahe">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/31.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/32.png">
+<meta property="article:published_time" content="2019-08-07T17:07:00.000Z">
+<meta property="article:modified_time" content="2019-08-10T09:04:58.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/jvm/31.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/08/jvm/10_compile_optimization/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>编译期优化 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Javac%E7%BC%96%E8%AF%91%E5%99%A8"><span class="nav-number">1.</span> <span class="nav-text">1. Javac编译器</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-Javac%E7%9A%84%E6%BA%90%E7%A0%81%E4%B8%8E%E8%B0%83%E8%AF%95"><span class="nav-number">1.1.</span> <span class="nav-text">1. Javac的源码与调试</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E8%A7%A3%E6%9E%90%E4%B8%8E%E5%A1%AB%E5%85%85%E7%AC%A6%E5%8F%B7%E8%A1%A8"><span class="nav-number">1.2.</span> <span class="nav-text">2. 解析与填充符号表</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E8%AF%8D%E6%B3%95%E3%80%81%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">1.2.0.1.</span> <span class="nav-text">1. 词法、语法分析</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E5%A1%AB%E5%85%85%E7%AC%A6%E5%8F%B7%E8%A1%A8"><span class="nav-number">1.2.0.2.</span> <span class="nav-text">2. 填充符号表</span></a></li></ol></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E6%B3%A8%E8%A7%A3%E5%A4%84%E7%90%86%E5%99%A8"><span class="nav-number">1.3.</span> <span class="nav-text">3. 注解处理器</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90%E4%B8%8E%E5%AD%97%E8%8A%82%E7%A0%81%E7%94%9F%E6%88%90"><span class="nav-number">1.4.</span> <span class="nav-text">4. 语义分析与字节码生成</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E6%A0%87%E6%B3%A8%E6%A3%80%E6%9F%A5"><span class="nav-number">1.4.0.1.</span> <span class="nav-text">1. 标注检查</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E6%95%B0%E6%8D%AE%E5%8F%8A%E6%8E%A7%E5%88%B6%E6%B5%81%E5%88%86%E6%9E%90"><span class="nav-number">1.4.0.2.</span> <span class="nav-text">2. 数据及控制流分析</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#3-%E8%AF%AD%E6%B3%95%E7%B3%96"><span class="nav-number">1.4.0.3.</span> <span class="nav-text">3. 语法糖</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#4-%E5%AD%97%E8%8A%82%E7%A0%81%E7%94%9F%E6%88%90"><span class="nav-number">1.4.0.4.</span> <span class="nav-text">4. 字节码生成</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Java%E8%AF%AD%E6%B3%95%E7%B3%96%E7%9A%84%E5%91%B3%E9%81%93"><span class="nav-number">2.</span> <span class="nav-text">2. Java语法糖的味道</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E6%B3%9B%E5%9E%8B%E4%B8%8E%E7%B1%BB%E5%9E%8B%E6%93%A6%E9%99%A4"><span class="nav-number">2.1.</span> <span class="nav-text">1. 泛型与类型擦除</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E8%87%AA%E5%8A%A8%E8%A3%85%E7%AE%B1%E3%80%81%E8%87%AA%E5%8A%A8%E6%8B%86%E7%AE%B1%E4%B8%8E%E9%81%8D%E5%8E%86%E5%BE%AA%E7%8E%AF"><span class="nav-number">2.2.</span> <span class="nav-text">2. 自动装箱、自动拆箱与遍历循环</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E6%9D%A1%E4%BB%B6%E7%BC%96%E8%AF%91"><span class="nav-number">2.3.</span> <span class="nav-text">3. 条件编译</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/08/jvm/10_compile_optimization/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          编译期优化
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-08 01:07 01:07:00" itemprop="dateCreated datePublished" datetime="2019-08-08T01:07:00+08:00">2019-08-08 01:07</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-10 17:04 17:04:58" itemprop="dateModified" datetime="2019-08-10T17:04:58+08:00">2019-08-10 17:04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/08/jvm/10_compile_optimization/" class="post-meta-item leancloud_visitors" data-flag-title="编译期优化" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/08/jvm/10_compile_optimization/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/08/jvm/10_compile_optimization/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Java语言的编译期是一段“不确定”的操作过程。</p>
+<ul>
+<li>前端编译器(编译器的前端)，把java文件转变成class文件的过程。例如：Sun的<code>Javac</code>、<code>Eclipse JDT</code>中的增量式编译器(ECJ)。</li>
+<li>虚拟机的后端运行期编译器(JIT编译器，Just In Time Compiler)，把字节码转变为机器码的过程。例如：<strong>HotSpot VM</strong>的<code>C1</code>、<code>C2</code>编译器。</li>
+<li>静态提前编译器(AOT编译器, Ahead Of Time Compiler)，直接把java文件编译成本地机器代码的过程。例如：<strong>GUN Compiler for the Java（GCJ)**、</strong>Excelsior JET**。</li>
+</ul>
+<p>上述过程中大家对Java认知最多的是第一类，其中“编译器”、“编译期”都仅限于第一类编译过程。第二类编译过程是<strong>运行期</strong>过程。</p>
+<p><strong>Javac</strong>编译器<strong>几乎未对</strong>代码运行效率做任何优化。虚拟机设计团队把对性能的优化集中到了后端即时编译器中，这样非Java产生的Class文件(例如，JRuby、Groovy等语言的Class文件)也可以享受到编译器优化带来的好处。</p>
+<p><strong>Javac</strong>做了许多针对Java语言编码过程的优化措施来改善程序员的编码风格和提高编码效率。<font color='red'>许多Java语法特性都是靠编译器的“语法糖”来实现，而不是依赖虚拟机底层改进来支持</font>，Java中的即时编译器在运行期的优化过程对于程序运行更重要，前端编译器的优化过程对于程序编码来说关系更密切。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 阅读Javac源码</li>
+</ul>
+<a id="more"></a>
+
+<h3 id="1-Javac编译器"><a href="#1-Javac编译器" class="headerlink" title="1. Javac编译器"></a>1. Javac编译器</h3><p>Javac本身是一个由Java语言编写的程序，所以可以通过阅读Javac编译器了解其编译过程。</p>
+<ul>
+<li><input disabled="" type="checkbox"> 阅读Javac源码</li>
+</ul>
+<h4 id="1-Javac的源码与调试"><a href="#1-Javac的源码与调试" class="headerlink" title="1. Javac的源码与调试"></a>1. Javac的源码与调试</h4><p>Javac的源码存放在<code>JDK_SRC_HOME/langtools/src/share/classes/com/sun/tools/javac</code>中，除了JDK自身API，只引用链<code>JDK_SRC_HOME/langtools/src/chare/classes/com/sun/*</code>里的代码。</p>
+<p>Sun Javac的代码中，编译过程大致包括以下3个过程：</p>
+<ul>
+<li>解析与填充符号表过程</li>
+<li>插入式注解处理器的注解处理过程</li>
+<li>分析与字节码生成过程</li>
+</ul>
+<p><img src="https://images.effiu.cn/blog/jvm/31.png" alt="Javac的编译过程"><a name='round'></a></p>
+<p>Javac的编译动作入口是<code>com.sun.tools.javac.com.main.JavaCompiler</code>类。上述编译过程的3个过程集中在该类的<code>compile()</code>和<code>compile2()</code>方法中，主体代码如下图：<a name='javac'></a></p>
+<p><img src="https://images.effiu.cn/blog/jvm/32.png" alt="Javac编译过程主体代码"></p>
+<h4 id="2-解析与填充符号表"><a href="#2-解析与填充符号表" class="headerlink" title="2. 解析与填充符号表"></a>2. 解析与填充符号表</h4><p>解析步骤由<a href='#javac'>上图</a>的<code>parseFiles()</code>方法完成，解析步骤包括程序编译原理中的词法分析和语法分析两个过程。</p>
+<h6 id="1-词法、语法分析"><a href="#1-词法、语法分析" class="headerlink" title="1. 词法、语法分析"></a>1. 词法、语法分析</h6><p><strong>词法分析</strong>是将源代码的字符流转变为标记(Token)集合，单个字符是程序编写过程的最小元素，而标记是编译过程的最小元素，关键字、变量名、字面量、运算符号都可以成为标记，例如：<code>int a = b + 2</code>，包含6个标记<code>int</code>、<code>a</code>、<code>=</code>、<code>b</code>、<code>+</code>、<code>2</code>，Javac的源码中，词法分析由<code>com.sun.tools.javac.parser.Scanner</code>类实现。</p>
+<p><strong>语法分析</strong>是根据Token序列构造抽象语法树的过程，抽象语法树(Abstract Synatx Tree, AST)是一种用来描述程序代码语法结构的树形表示方式，语法树每个节点都代表着程序代码中的一个语法结构。例如包、类型、修饰符、运算符、接口、返回值甚至代码注释等都可以是一个语法结构。</p>
+<p>Javac的源码中，语法分析过程由<code>com.sun.tools.javac.parser.Parser</code>类实现，这个节点产出的语法树由<code>com.sun.tools.javac.tree.JCTree</code>类表示，经过<font color='red'>语法解析后，编译器就不会再对源码文件进行操作了，后续操作步骤都建立在抽象语法树上</font>。</p>
+<h6 id="2-填充符号表"><a href="#2-填充符号表" class="headerlink" title="2. 填充符号表"></a>2. 填充符号表</h6><p>语法分析和词法分析后，就是填充符号表的过程，即<a href='javac'>上图</a>中的<code>enterTrees()</code>方法。符号表(Symbol Table)是一组符号地址和符号信息构成的表格。符号表中所登记的信息在变异的不同阶段都要用到。语义分析中，符号表登记的内容将用于语义检查(一个名字的使用和原先的说明是否一致)和产生中间代码。在目标代码生成阶段，党对符号名进行地址分配时，符号表是地址分配的依据。</p>
+<p>Javac的源码中，填充符号表的过程由<code>com.sun.tools.javac.comp.Enter</code>类实现，填充符号表的出口是一个待处理列表(To Do List)，包含每个编译单元的抽象语法树的定级节点，以及<code>package-info.java</code>(可能不存在)的定级节点。</p>
+<h4 id="3-注解处理器"><a href="#3-注解处理器" class="headerlink" title="3. 注解处理器"></a>3. 注解处理器</h4><p>JDK5之后，Java语言提供了对注解(Annotation)的支持，其与普通Java代码一样，是在运行期间发挥作用的。</p>
+<p>JDK6中实现了<strong>JSR-269</strong>规范(插入式注解处理API)，提供了一组插入式注解处理器的标准API在编译期间对注解进行处理，其可以认为是一组编译器的插件，在这些插件里面，可以读取、修改、添加抽象语法树中的任意元素。若这些插件在处理注解期间对语法树进行了修改，编译器将回到解析及填充符号表的过程重新处理，直到所有插入式注解处理器都没有再对语法树进行修改为止，每一次循环称为一个Round，见<a href='#round'>上图</a>。</p>
+<p>有了编译器注解处理的标准API后，我们的代码才有可能干涉编译器的行为，由于语法树中的任意元素，甚至包括代码注释都可以在插件之中访问，所以通过插入式注解处理器实现的插件在功能上有很大的发挥空间（只要想象力丰富，可以实现许多原本在编码中完成的事情）。</p>
+<p>在Javac源码中，插入式注解处理器的初始化过程是在<code>initPorcessAnnotation()</code>方法中完成的，其执行过程是在<code>processAnnotation()</code>方法中完成的，该方法判断是否还有新的注解处理器需要执行，若存在通过<code>com.sun.tools.javac.processing.JavaProcessEnvironment</code>类的<code>doProcessing()</code>方法生成一个新的<code>JavaCompiler</code>对象对编译的后续步骤进行处理。</p>
+<h4 id="4-语义分析与字节码生成"><a href="#4-语义分析与字节码生成" class="headerlink" title="4. 语义分析与字节码生成"></a>4. 语义分析与字节码生成</h4><p>语法分析之后编译器获得了程序代码的抽象语法树，其可以表示一个结构正确的源程序的抽象，但无法保证其是符合逻辑的。语义分析的主要作用就是对结构上正确的源程序进行上下文有关性质的审查，例如类型审查：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> a = <span class="number">1</span>;</span><br><span class="line"><span class="keyword">boolean</span> b = <span class="keyword">false</span>;</span><br><span class="line"><span class="keyword">char</span> c = <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> a = a + c;</span><br><span class="line"><span class="keyword">int</span> d = b + c;</span><br><span class="line"><span class="keyword">char</span> d = d + c;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码中，3种赋值运算都可以构成正确的语法树，但只有第一个运算的写法在语义上是正确的，可以通过编译。</p>
+<h6 id="1-标注检查"><a href="#1-标注检查" class="headerlink" title="1. 标注检查"></a>1. 标注检查</h6><p>语义分析分为标注检查和数据及控制流分析两个步骤。分别由<a href='#javac'><code>attribute()</code></a>和<a href='#javac'><code>flow()</code></a>方法完成。</p>
+<p>标注检查步骤检查的内容包括诸如变量使用前是否已被声明、变量与复制之间的数据类型是否能够匹配等等。标注检查的一个重要动作是<strong>常量折叠</strong>。例如：在如下代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> a = <span class="number">1</span> + <span class="number">2</span>;</span><br></pre></td></tr></table></figure>
+
+<p>在语法树上仍然有“1”、“2”、“+”等标记(Token)，但是经过标注检查的常量折叠后，其会被折叠为字面量“3”，所以实际上<code>a = 1 + 2</code>并不比<code>a = 3</code>在运行期增加运算量。类内所有运算都会进行常量折叠。</p>
+<p>标注检查步骤在<strong>Javac</strong>源码中的实现类是<code>com.sun.tools.javac.comp.Attr</code>类和<code>com.sun.tools.javac.comp.Check</code>类。</p>
+<h6 id="2-数据及控制流分析"><a href="#2-数据及控制流分析" class="headerlink" title="2. 数据及控制流分析"></a>2. 数据及控制流分析</h6><p>数据及控制流分析是对程序上下文逻辑更进一步的验证，其可以检查出诸如程序局部变量在使用前是否有赋值、方法的每条路径是否都有返回值、是否所有的差检查异常都被正确处理了等问题。编译期的数据及控制流分析与类加载时的数据及控制流分析的目的基本上是一致的，但校验范围有区别，部分校验只有在编译期或运行期才能进行。如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">foo</span><span class="params">(<span class="keyword">final</span> <span class="keyword">int</span> arg)</span></span>&#123;</span><br><span class="line">    <span class="keyword">final</span> <span class="keyword">int</span> <span class="keyword">var</span> = <span class="number">0</span>;</span><br><span class="line">    <span class="comment">// do something</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">foo</span><span class="params">(<span class="keyword">int</span> arg)</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> <span class="keyword">var</span> = <span class="number">0</span>;</span><br><span class="line">    <span class="comment">// do something</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述两个<code>foo()</code>方法中，第一个方法的参数和局部变量定义使用了<code>final</code>修饰符，而第二种方法则没有，在代码编写时期会受到final修饰符的影响，不能再改变arg和var变量的值，但是这两段代码编译出的Class文件没有任何区别的(反编译查看后无区别)。局部变量与字段(实例变量、类变量)是有区别的，它在常量池中没有<code>CONSTANT_Fieldref_inf</code>的符号引用，所有没有访问标志的信息，甚至连名字都不会保留下来(取决于编译时的选项)，所以编译后的Class文件不可能存在区别。<font color='red'>局部变量声明为<code>final</code>, 对运行期没有任何影响，变量的不变性仅仅由编译器在编译期间保障</font>。<strong>Javac</strong>源码中数据及控制流分析的入口是<a href='#javac'>上图</a>中的<code>flow()</code>方法，具体操作由<code>com.sun.tools.java.comp.Flow</code>类完成。</p>
+<h6 id="3-语法糖"><a href="#3-语法糖" class="headerlink" title="3. 语法糖"></a>3. 语法糖</h6><p>语法糖(Syntactic Sugar)是指在计算机语言中添加的某种语法，这种语法对语言的功能没有影响，但是更方便程序员使用。通常使用语法糖能够增加程序的可读性，从而减少程序代码出错的机会。<br>Java中最常用的语法糖主要是泛型、变长参数、自动装箱/拆箱等等，其会在编译阶段还原回简单的基础语法结构(虚拟机运行时不支持这些语法)，这成为解语法糖。</p>
+<p>在<strong>Javac</strong>的源码中，解语法糖的过程由<code>desugar()</code>方法触发，在<code>com.sun.tools.javac.comp.TransTypes</code>类和<code>com.sun.tools.javac.comp.Lower</code>类中完成。</p>
+<h6 id="4-字节码生成"><a href="#4-字节码生成" class="headerlink" title="4. 字节码生成"></a>4. 字节码生成</h6><p>字节码生成是<strong>Javac</strong>编译过程的最后一个阶段，在<strong>Javac</strong>源码中由<code>com.sun.tools.javac.jvm.Gen</code>类完成。字节码生成阶段不仅仅是把前面各个步骤所生成的信息(语法树、符号表)转化成字节码写到磁盘中，编译器还进行了少量的代码添加和转换工作。</p>
+<p>例如：类的实例构造器<code>&lt;init&gt;()</code>方法和类构造器<code>&lt;clinit&gt;()</code>方法就是在该阶段添加到语法树中的(实例构造器并不一定是默认构造函数，若用户程序代码中没有提供任何构造函数，那编译器将会添加一个没有参数、访问性(<code>public</code>、<code>private</code>、<code>protected</code>)与当前类一致的默认构造函数，这个工作在填充符号表阶段已经完成)，这两个构造器的产生过程是一个代码收敛的过程，编译器会把语句块(<code>&#123;&#125;</code>、<code>static&#123;&#125;</code>)、变量初始化(实例变量和类变量)、调用父类的实例构造器(仅仅是实例构造器，类构造器<code>&lt;clinit&gt;()</code>中不需要调用父类<code>&lt;clinit&gt;()</code>方法，虚拟机会自动保证父类构造器的执行)等操作收敛到<code>&lt;init&gt;()</code>和<code>&lt;clinit&gt;()</code>方法之中，且会保证一定是按先执行父类的实例构造器，然后初始化变量，最后执行语句块的顺序进行，该动作由<code>Gen.normalizeDefs()</code>方法实现。</p>
+<p>其他代码替换工作用于优化程序的实现逻辑，如把字符串的加操作替换为<code>StringBuffer</code>或者<code>StringBuilder</code>的<code>append()</code>等操作。</p>
+<p>完成了语法树的遍历和调整之后，就会把填充了所有需要信息的符号表交给<code>com.sun.tools.javac.jvm.ClassWriter</code>类，由这个类的<code>writeClass()</code>方法输出字节码，生成最终的Class文件，到此整个<strong>Javac</strong>的编译过程结束。</p>
+<h3 id="2-Java语法糖的味道"><a href="#2-Java语法糖的味道" class="headerlink" title="2. Java语法糖的味道"></a>2. Java语法糖的味道</h3><p>几乎所有语言都有语言都或多或少提供过语法糖方便程序员开发，其虽然不会提供是指性的功能改进，但有许多优点：提高效率、提升语法的严谨性、减少编码出错的机会等等，但容易让程序员产生依赖，无法看清语法糖的糖衣，程序代码的真是面目。</p>
+<h4 id="1-泛型与类型擦除"><a href="#1-泛型与类型擦除" class="headerlink" title="1. 泛型与类型擦除"></a>1. 泛型与类型擦除</h4><p>泛型是JDK5的一项新增特性，其本质是参数化类型(Parametersized Type)的应用，即<font color='red'>所操作的数据类型被指定为一个参数</font>。这种参数可以应用在类、接口和方法的创建中，分别称为泛型类、泛型接口和泛型方法。</p>
+<p>泛型技术在C#和Java之中的使用方式有区别。C#里无论在程序源码中、编译后的IL中(Intermediate Language，中间语言，泛型是一个占位符)，或是运行期的CLR(Common Language Runtime)中，都是切实存在的。<code>List&lt;Integer&gt;</code>和<code>List&lt;String&gt;</code>就是两种类型，它们在系统运行期生成，有自己的虚方法表和类型数据，这种实现称为<strong>类型膨胀</strong>，基于这种方法实现的泛型称为<strong>真实泛型</strong>。</p>
+<p>Java语言中泛型只在程序源码中存在，在变以后的字节码文件中就会被替换为原来的原生类型(Raw Type，裸类型)了，且在相应的地方插入了强制转型代码，因此对于运行期代码来说，<code>ArrayList&lt;Integer&gt;</code>和<code>ArrayList&lt;String&gt;</code>就是一种类型，所以Java泛型技术是Java语言的一颗语法糖，Java语言中的泛型实现方法称为<strong>类型擦除</strong>，基于这种方法实现的泛型称为<strong>伪泛型</strong>。</p>
+<p>类型擦除实现泛型丧失了一些泛型思想应有的优雅。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">GenericTypes</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">method</span><span class="params">(List&lt;String&gt; list)</span></span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;invoke method(List&lt;String&gt; list)&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">method</span><span class="params">(List&lt;Integer&gt; list)</span></span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;invoke method(List&lt;Integer&gt; list)&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码不能被编译，因为参数<code>List&lt;String&gt;</code>和<code>List&lt;Integer&gt;</code>编译之后都被擦除了，所以其特征签名一样。<font color='red'>泛型擦除成相同的类型是上述方法不能重载的部分原因</font>。</p>
+<ul>
+<li><input disabled="" type="checkbox"> jdk8编译失败</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">GenericTypes</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> String <span class="title">method</span><span class="params">(List&lt;String&gt; list)</span> </span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;invoke method(List&lt;String&gt; list)&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">int</span> <span class="title">method</span><span class="params">(List&lt;Integer&gt; list)</span> </span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;invoke method(List&lt;Integer&gt; list)&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        method(<span class="keyword">new</span> ArrayList&lt;String&gt;());</span><br><span class="line">        method(<span class="keyword">new</span> ArrayList&lt;Integer&gt;());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码添加了不同的返回值，方法重载成功了。原因是：两个<code>method</code>方法加入不同的返回值后才能共存在一个Class文件中。<a target='_blank' href='/blog/2019/06/22/jvm/6_class_structure#methodSign'>Class文件结构</a>中的方法表的数据结构中，方法重载要求方法具有不同的特征签名，返回值和受检查异常列表包含在方法的特征签名中，所以返回值不参与重载选择，但是在Class文件格式中，只要描述符不是完全一致的两个方法就可以共存，所以两个方法具有相同的名称和特征签名，只要返回类型不同，就可以共存于一个Class文件中。</p>
+<p>由于Java泛型的引入，不可避免地产生了新的需求，例如：在泛型类中如何获取传入的参数化类型等。因此JCP(Java Community Process)组织对虚拟机规范做出了相应修改，引入了<code>Signature</code>、<code>LocalVariableTypeTable</code>等新的属性用于解决伴随泛型而来的参数类型识别问题，<code>Signature</code>作用是存储一个方法在字节码层面的特征签名，这个属性中保存的参数类型并不是原生类型，而是包括了参数化类型的信息。</p>
+<p>擦除法所谓的擦除，仅仅是对方法的Code属性中的字节码进行擦除，实际上元数据中还是保留了泛型信息。</p>
+<h4 id="2-自动装箱、自动拆箱与遍历循环"><a href="#2-自动装箱、自动拆箱与遍历循环" class="headerlink" title="2. 自动装箱、自动拆箱与遍历循环"></a>2. 自动装箱、自动拆箱与遍历循环</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SyntacticSugar</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">SyntacticSugar</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] var0)</span> </span>&#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        List var0 = Arrays.asList(<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>);</span><br><span class="line">        <span class="keyword">int</span> var1 = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> var3;</span><br><span class="line">        <span class="keyword">for</span>(Iterator var2 = var0.iterator(); var2.hasNext(); var1 += var3) &#123;</span><br><span class="line">            var3 = (Integer)var2.next();</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        System.out.println(var1);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test1</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        Integer var0 = <span class="number">1</span>;</span><br><span class="line">        Integer var1 = <span class="number">2</span>;</span><br><span class="line">        Integer var2 = <span class="number">3</span>;</span><br><span class="line">        Integer var3 = <span class="number">3</span>;</span><br><span class="line">        Integer var4 = <span class="number">321</span>;</span><br><span class="line">        Integer var5 = <span class="number">321</span>;</span><br><span class="line">        Long var6 = <span class="number">3L</span>;</span><br><span class="line">        System.out.println(var2 == var3);				<span class="comment">// true，-128~127</span></span><br><span class="line">        System.out.println(var4 == var5);				<span class="comment">// false</span></span><br><span class="line">        System.out.println(var2 == var0 + var1);		 <span class="comment">// true，常量叠加，-128~127</span></span><br><span class="line">        System.out.println(var2.equals(var0 + var1));	  <span class="comment">// true</span></span><br><span class="line">        System.out.println(var6 == (<span class="keyword">long</span>)(var0 + var1));  <span class="comment">// true，类型强转</span></span><br><span class="line">        System.out.println(var6.equals(var0 + var1));     <span class="comment">// false 类型不一致</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码中包含了泛型、自动装箱、自动拆箱、遍历循环与变长参数5中语法糖。下述代码则是其编译后使用<strong>Java Decompiler</strong>打开后的(idea打开后看不到自动装箱/拆箱与变长参数语法糖)</p>
+<ul>
+<li>自动装箱、自动拆箱在编译后备转化为对应的包装和还原方法，<code>Integer.valueOf()</code>和<code>Integer.intValue()</code></li>
+<li>遍历循环则把代码还原成立迭代器的实现，这也是遍历循环需要被遍历的类实现<code>Iterable</code>接口的原因</li>
+<li>变长参数在调用是变成了一个数组类型的参数</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SyntacticSugar</span></span></span><br><span class="line"><span class="class"></span>&#123;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] paramArrayOfString)</span> </span>&#123;&#125;</span><br><span class="line">  </span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test</span><span class="params">()</span></span></span><br><span class="line"><span class="function">  </span>&#123;</span><br><span class="line">    List localList = Arrays.asList(<span class="keyword">new</span> Integer[] &#123; Integer.valueOf(<span class="number">1</span>), Integer.valueOf(<span class="number">2</span>), Integer.valueOf(<span class="number">3</span>), Integer.valueOf(<span class="number">4</span>) &#125;);</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">for</span> (Iterator localIterator = localList.iterator(); localIterator.hasNext();) &#123; <span class="keyword">int</span> j = ((Integer)localIterator.next()).intValue();</span><br><span class="line">      i += j;</span><br><span class="line">    &#125;</span><br><span class="line">    System.out.println(i);</span><br><span class="line">  &#125;</span><br><span class="line">  </span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test1</span><span class="params">()</span></span></span><br><span class="line"><span class="function">  </span>&#123;</span><br><span class="line">    Integer localInteger1 = Integer.valueOf(<span class="number">1</span>);</span><br><span class="line">    Integer localInteger2 = Integer.valueOf(<span class="number">2</span>);</span><br><span class="line">    Integer localInteger3 = Integer.valueOf(<span class="number">3</span>);</span><br><span class="line">    Integer localInteger4 = Integer.valueOf(<span class="number">3</span>);</span><br><span class="line">    Integer localInteger5 = Integer.valueOf(<span class="number">321</span>);</span><br><span class="line">    Integer localInteger6 = Integer.valueOf(<span class="number">321</span>);</span><br><span class="line">    Long localLong = Long.valueOf(<span class="number">3L</span>);</span><br><span class="line">    System.out.println(localInteger3 == localInteger4);</span><br><span class="line">    System.out.println(localInteger5 == localInteger6);</span><br><span class="line">    System.out.println(localInteger3.intValue() == localInteger1.intValue() + localInteger2.intValue());</span><br><span class="line">    System.out.println(localInteger3.equals(Integer.valueOf(localInteger1.intValue() + localInteger2.intValue())));</span><br><span class="line">    System.out.println(localLong.longValue() == localInteger1.intValue() + localInteger2.intValue());</span><br><span class="line">    System.out.println(localLong.equals(Integer.valueOf(localInteger1.intValue() + localInteger2.intValue())));</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="3-条件编译"><a href="#3-条件编译" class="headerlink" title="3. 条件编译"></a>3. 条件编译</h4><p>许多程序设计语言都提供了条件编译的途径，如C、C++中使用预处理指示符(<code>#ifdef</code>)完成条件编译。而C、C++预处理器最初的任务是解决编译时的代码依赖关系(<code>#include</code>预处理命令等)，但在Java中没有预处理器，因为Javac编译器并不是一个个地编译Java文件，而是将所有编译单元的语法树定级节点输入到待处理列表后再进行编译，因此各个文件之间能够互相提供符号信息，不需要使用预处理器。</p>
+<p>Java中也可以使用条件编译，方法就是使用条件为常量的<code>if</code>语句。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test2</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;block 1&quot;</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;block 2&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码编译后Class文件的反编译结果：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">test2</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    System.out.println(<span class="string">&quot;block 1&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>只能使用条件为常量的if语句才能达到上述效果，如果使用常量与其他带有条件判断能力的语句搭配，可能在控制流分析中提示错误，拒绝编译(<strong>Unreachable statement</strong>)。例如:</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span> (<span class="keyword">false</span>) &#123;    </span><br><span class="line">    System.out.println(<span class="string">&quot;block 1&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Java语言中条件编译的实现，也是Java语言的一颗语法糖，根据布尔常量值的真假编译器会把分支中不成立的代码块消除掉，这一工作将在编译器解除语法糖阶段(<code>com.sun.tools.javac.comp.Lower</code>类中)完成。由于这种条件编译的实现方式使用了<code>if</code>语句，所以其必须遵循最基本的Java语法，只能写在方法体内部，因此只能实现语句基本块级别的编译，没有办法实现根据条件调整整个java类的结构。</p>
+<p>Java其他语法糖：内部类，枚举类、断言语句、对枚举和字符串的switch支持、try-with-resource等。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/07/mysql/10_transaction_isolation/" rel="prev" title="MySQL事务及隔离性">
+      <i class="fa fa-chevron-left"></i> MySQL事务及隔离性
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/11/jvm/12_jmm_thread/" rel="next" title="Java内存模型与线程">
+      Java内存模型与线程 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="HikarCP是快速、简单、可靠的、非常轻量的JDBC连接池。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HikariCP">
+<meta property="og:url" content="https://www.effiu.cn/2020/05/04/java/HikariCP/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="HikarCP是快速、简单、可靠的、非常轻量的JDBC连接池。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/other/hikaricp/02.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/other/hikaricp/01.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/other/hikaricp/03.png">
+<meta property="article:published_time" content="2020-05-04T14:17:00.000Z">
+<meta property="article:modified_time" content="2020-05-05T12:34:58.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/other/hikaricp/02.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/05/04/java/HikariCP/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>HikariCP | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-HikariConfig"><span class="nav-number">1.</span> <span class="nav-text">1. HikariConfig</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E5%9F%BA%E6%9C%AC%E9%85%8D%E7%BD%AE%E9%A1%B9"><span class="nav-number">1.1.</span> <span class="nav-text">1. 基本配置项</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E9%85%8D%E7%BD%AE%E6%96%B9%E5%BC%8F"><span class="nav-number">1.2.</span> <span class="nav-text">2. 配置方式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E9%83%A8%E5%88%86%E6%BA%90%E7%A0%81"><span class="nav-number">1.3.</span> <span class="nav-text">3. 部分源码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-HikariConfigMXBean"><span class="nav-number">1.4.</span> <span class="nav-text">4. HikariConfigMXBean</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-PoolBase"><span class="nav-number">2.</span> <span class="nav-text">2. PoolBase</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-PoolEntry"><span class="nav-number">3.</span> <span class="nav-text">3. PoolEntry</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-HikariPool"><span class="nav-number">4.</span> <span class="nav-text">4. HikariPool</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-ConcurrentBag"><span class="nav-number">5.</span> <span class="nav-text">5. ConcurrentBag</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-%E5%90%AF%E5%8A%A8%E8%BF%87%E7%A8%8B"><span class="nav-number">6.</span> <span class="nav-text">6. 启动过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-%E8%8E%B7%E5%8F%96%E6%95%B0%E6%8D%AE%E5%BA%93%E8%BF%9E%E6%8E%A5%E8%BF%87%E7%A8%8B"><span class="nav-number">7.</span> <span class="nav-text">7. 获取数据库连接过程</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/05/04/java/HikariCP/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          HikariCP
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-05-04 22:17 22:17:00" itemprop="dateCreated datePublished" datetime="2020-05-04T22:17:00+08:00">2020-05-04 22:17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-05-05 20:34 20:34:58" itemprop="dateModified" datetime="2020-05-05T20:34:58+08:00">2020-05-05 20:34</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/05/04/java/HikariCP/" class="post-meta-item leancloud_visitors" data-flag-title="HikariCP" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/05/04/java/HikariCP/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/05/04/java/HikariCP/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>20 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>HikarCP是快速、简单、可靠的、非常轻量的JDBC连接池。</p>
+<a id="more"></a>
+
+<h2 id="1-HikariConfig"><a href="#1-HikariConfig" class="headerlink" title="1. HikariConfig"></a>1. HikariConfig</h2><h3 id="1-基本配置项"><a href="#1-基本配置项" class="headerlink" title="1. 基本配置项"></a>1. 基本配置项</h3><ul>
+<li><p><code>dataSourceClassName</code>:JDBC驱动程序提供的<code>DataSource</code>类的名称。如果使用<code>jdbcUrl</code>进行基于老式<code>DriverManager</code>的<code>JDBC</code>驱动程序配置，则不需要此属性。见源码:<code>com.zaxxer.hikari.pool.PoolBase#initializeDataSource中</code></p>
+</li>
+<li><p><code>jdbcUrl</code>:HikariCP会基于<code>DriverManager</code>进行<code>DataSource</code>进行数据源的配置，基于数据源的配置优于基于jdbcUrl的配置，但是实际差异不大。</p>
+</li>
+<li><p><code>username</code>:设置从基础驱动程序获取连接时使用的身份验证的用户名。</p>
+</li>
+<li><p><code>password</code>:设置从基础驱动程序获取链接时使用的身份验证的密码。</p>
+</li>
+<li><p><code>isAutoCommit</code>:控制从连接池返回的连接的自动提交行为，默认为true</p>
+</li>
+<li><p><code>connectionTimeout</code>:控制客户端等待来自池的连接的最大毫秒数，最小值为250ms，默认值为<code>Integer.MAX_VALU</code>。</p>
+</li>
+<li><p><code>idleTimeout</code>:控制池中处于空闲状态的连接的最长时间。仅仅当<code>minimumIdle</code>小于<code>maximumPoolSize</code>时才会起作用，否则当达到<code>maximumPoolSize</code>后将不会销毁。若值为0，则表示永远不会销毁，最小值为10s，默认值为10m。</p>
+</li>
+<li><p><code>maxLifeTime</code>:此属性控制池中连接的最大生存期。使用中的连接永远不会停止使用，只有在关闭后才将其删除。0表示无限寿命(会遵守<code>idleTime</code>设置)，默认30m。</p>
+</li>
+<li><p><code>connectionTestQuery</code>:若支持JDBC4，则不推荐设置该属性。是针对不支持JDBC4的驱动程序在从池中提供连接之前执行的查询，以验证与数据库的连接仍然有效。</p>
+<blockquote>
+<p>  JDBC4以后，<code>connection</code>提供了<code>isValid</code>方法，不再需要改配置检查连接,见<code>com.zaxxer.hikari.pool.PoolBase#isConnectionAlive</code>。</p>
+</blockquote>
+</li>
+<li><p><code>minIdle</code>:连接池中的最小空闲数，若空闲连接下降到该值以下，且池中总连接数小于<code>maxPoolSize</code>,则<strong>HikariCP</strong>将最大努力快速有效地添加连接。<font color='red'>为了获得最佳性能和对峰值需求的响应能力,不建议设置此值</font>。默认等于<code>maxPoolSize</code>。</p>
+</li>
+<li><p><code>maxPoolSize</code>:控制允许池内连接数达到的最大值，包括空闲中和使用中的连接数。当池内连接数达到最大且空闲连接为0时，<code>getConnection()</code>将阻塞<code>connectioinTimeout</code>秒。</p>
+</li>
+<li><p><code>poolName</code>:表示连接池的用户定义名称，主要用于在日志或者JMX管理控制台中，以识别池信息，默认自动生成，<code>poolName = &quot;HikariPool-&quot; + POOL_NUMBER.getAndIncrement();</code>。</p>
+</li>
+<li><p><code>connectionInitSql</code>:设置一个SQL语句，每次创建连接后执行，然后把连接加入到连接池中。</p>
+</li>
+</ul>
+<h3 id="2-配置方式"><a href="#2-配置方式" class="headerlink" title="2. 配置方式"></a>2. 配置方式</h3><ol>
+<li><code>new HikariCP()</code>，其是通过<code>System.setProperty(&quot;hikaricp.configurationFile&quot;, filePath)</code>获取配置文件路径，将配置文件加载为<code>Properties</code>，然后通过反射将文件内的配置信息初始化。</li>
+<li><code>new HikariConfig(Properties properties)</code>，直接通过反射将properties内的配置信息初始化连接池配置。</li>
+<li><code>new HikariConfig(String propertyFileName)</code>与1类似。</li>
+</ol>
+<h3 id="3-部分源码"><a href="#3-部分源码" class="headerlink" title="3. 部分源码"></a>3. 部分源码</h3><p><code>HikariConfig</code>是一个连接池配置属性类，主要是一些配置属性及其<code>get</code>和<code>set</code>方法，还有这些属性是否合法的校验。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">validateNumerics</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// maxLifetime不能小于30s</span></span><br><span class="line">    <span class="keyword">if</span> (maxLifetime != <span class="number">0</span> &amp;&amp; maxLifetime &lt; SECONDS.toMillis(<span class="number">30</span>)) &#123;</span><br><span class="line">        LOGGER.warn(<span class="string">&quot;&#123;&#125; - maxLifetime is less than 30000ms, setting to default &#123;&#125;ms.&quot;</span>, poolName, MAX_LIFETIME);</span><br><span class="line">        maxLifetime = MAX_LIFETIME;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 若idleTimeout大于maxLifetime且maxLifetime大于0，则idleTimeout=0</span></span><br><span class="line">    <span class="keyword">if</span> (idleTimeout + SECONDS.toMillis(<span class="number">1</span>) &gt; maxLifetime &amp;&amp; maxLifetime &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        LOGGER.warn(<span class="string">&quot;&#123;&#125; - idleTimeout is close to or more than maxLifetime, disabling it.&quot;</span>, poolName);</span><br><span class="line">        idleTimeout = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// idleTimeout必须大于10</span></span><br><span class="line">    <span class="keyword">if</span> (idleTimeout != <span class="number">0</span> &amp;&amp; idleTimeout &lt; SECONDS.toMillis(<span class="number">10</span>)) &#123;</span><br><span class="line">        LOGGER.warn(<span class="string">&quot;&#123;&#125; - idleTimeout is less than 10000ms, setting to default &#123;&#125;ms.&quot;</span>, poolName, IDLE_TIMEOUT);</span><br><span class="line">        idleTimeout = IDLE_TIMEOUT;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (leakDetectionThreshold &gt; <span class="number">0</span> &amp;&amp; !unitTest) &#123;</span><br><span class="line">        <span class="keyword">if</span> (leakDetectionThreshold &lt; SECONDS.toMillis(<span class="number">2</span>) || (leakDetectionThreshold &gt; maxLifetime &amp;&amp; maxLifetime &gt; <span class="number">0</span>)) &#123;</span><br><span class="line">            LOGGER.warn(<span class="string">&quot;&#123;&#125; - leakDetectionThreshold is less than 2000ms or more than maxLifetime, disabling it.&quot;</span>, poolName);</span><br><span class="line">            leakDetectionThreshold = <span class="number">0</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// connectionTimeout必须大于250ms</span></span><br><span class="line">    <span class="keyword">if</span> (connectionTimeout &lt; <span class="number">250</span>) &#123;</span><br><span class="line">        LOGGER.warn(<span class="string">&quot;&#123;&#125; - connectionTimeout is less than 250ms, setting to &#123;&#125;ms.&quot;</span>, poolName, CONNECTION_TIMEOUT);</span><br><span class="line">        connectionTimeout = CONNECTION_TIMEOUT;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// validationTimeout必须大于250ms</span></span><br><span class="line">    <span class="keyword">if</span> (validationTimeout &lt; <span class="number">250</span>) &#123;</span><br><span class="line">        LOGGER.warn(<span class="string">&quot;&#123;&#125; - validationTimeout is less than 250ms, setting to &#123;&#125;ms.&quot;</span>, poolName, VALIDATION_TIMEOUT);</span><br><span class="line">        validationTimeout = VALIDATION_TIMEOUT;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 若maxPoolSize小于0，则maxPoolSize = minIdle</span></span><br><span class="line">    <span class="keyword">if</span> (maxPoolSize &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (minIdle &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            minIdle = <span class="number">10</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        maxPoolSize = minIdle;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 若minIdle小于0或者大于maxPoolSize，则minIdle = maxPoolSize</span></span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (minIdle &lt; <span class="number">0</span> || minIdle &gt; maxPoolSize) &#123;</span><br><span class="line">        minIdle = maxPoolSize;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="4-HikariConfigMXBean"><a href="#4-HikariConfigMXBean" class="headerlink" title="4. HikariConfigMXBean"></a>4. HikariConfigMXBean</h3><p><code>HikariConfig</code>实现了<code>HikariConfigMXBean</code>，其是一个<code>javax.management</code>的MBean，用于连接池的配置。<code>HikariConfigMXBean</code>其内部方法如下:</p>
+<p><img src="https://images.effiu.cn/blog/other/hikaricp/02.png" alt="HikariConfigMXBean方法"></p>
+<blockquote>
+<p>  JMX（Java Management Extensions，即Java管理扩展）是一个为应用程序、设备、系统等植入管理功能的框架。JMX可以跨越一系列异构操作系统平台、系统体系结构和网络传输协议，灵活的开发无缝集成的系统、网络和服务管理应用。通常使用JMX来监控系统的运行状态或管理系统的某些方面，比如清空缓存、重新加载配置文件等</p>
+</blockquote>
+<h2 id="2-PoolBase"><a href="#2-PoolBase" class="headerlink" title="2. PoolBase"></a>2. PoolBase</h2><p>PoolBase是一个抽象类，其实现了连接池的部分公共方法。</p>
+<ol>
+<li>初始化</li>
+</ol>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// com.zaxxer.hikari.pool.PoolBase#initializeDataSource中</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">initializeDataSource</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">final</span> String jdbcUrl = config.getJdbcUrl();</span><br><span class="line">    <span class="keyword">final</span> String username = config.getUsername();</span><br><span class="line">    <span class="keyword">final</span> String password = config.getPassword();</span><br><span class="line">    <span class="keyword">final</span> String dsClassName = config.getDataSourceClassName();</span><br><span class="line">    <span class="keyword">final</span> String driverClassName = config.getDriverClassName();</span><br><span class="line">    <span class="keyword">final</span> Properties dataSourceProperties = config.getDataSourceProperties();</span><br><span class="line"></span><br><span class="line">    DataSource dataSource = config.getDataSource();</span><br><span class="line">	</span><br><span class="line">    <span class="comment">//说明dataSourceClassName和jdbcUrl不需要同时配置</span></span><br><span class="line">	<span class="comment">// 会根据dataSourceName初始化dataSource</span></span><br><span class="line">    <span class="keyword">if</span> (dsClassName != <span class="keyword">null</span> &amp;&amp; dataSource == <span class="keyword">null</span>) &#123;</span><br><span class="line">        dataSource = createInstance(dsClassName, DataSource.class);</span><br><span class="line">        PropertyElf.setTargetFromProperties(dataSource, dataSourceProperties);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 根据jdbcUrl初始化dataSource</span></span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (jdbcUrl != <span class="keyword">null</span> &amp;&amp; dataSource == <span class="keyword">null</span>) &#123;</span><br><span class="line">        dataSource = <span class="keyword">new</span> DriverDataSource(jdbcUrl, driverClassName, dataSourceProperties, username, password);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (dataSource != <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="comment">// 根据connectionTimeout，最小为1000</span></span><br><span class="line">        setLoginTimeout(dataSource, connectionTimeout);</span><br><span class="line">        <span class="comment">// 创建网络超时坚持任务</span></span><br><span class="line">        createNetworkTimeoutExecutor(dataSource, dsClassName, jdbcUrl);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">this</span>.dataSource = dataSource;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>建立连接</li>
+</ol>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Connection <span class="title">newConnection</span><span class="params">()</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">    Connection connection = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        String username = config.getUsername();</span><br><span class="line">        String password = config.getPassword();</span><br><span class="line"></span><br><span class="line">        connection = (username == <span class="keyword">null</span>) ? dataSource.getConnection() : dataSource.getConnection(username, password);</span><br><span class="line">        <span class="comment">// 设置一些初始值或者状态，例如超时时间、自动提交、事物隔离级别、连接检查等</span></span><br><span class="line">        setupConnection(connection);</span><br><span class="line">        lastConnectionFailure.set(<span class="keyword">null</span>);</span><br><span class="line">        <span class="keyword">return</span> connection;</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        lastConnectionFailure.set(e);</span><br><span class="line">        quietlyCloseConnection(connection, <span class="string">&quot;(Failed to create/set connection)&quot;</span>);</span><br><span class="line">        <span class="keyword">throw</span> e;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 设置连接的初始状态,包括网络超时时间、驱动版本、连接的一些属性等等</span></span><br><span class="line"><span class="comment"> * Setup a connection initial state.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> connection a Connection</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@throws</span> SQLException thrown from driver</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">setupConnection</span><span class="params">(<span class="keyword">final</span> Connection connection)</span> <span class="keyword">throws</span> SQLException </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (networkTimeout == UNINITIALIZED) &#123;</span><br><span class="line">        <span class="comment">// validationTimeout控制测试连接活跃最长时间，必须小于connectionTimeout,最小值为250ms，默认5000ms</span></span><br><span class="line">        networkTimeout = getAndSetNetworkTimeout(connection, validationTimeout);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        setNetworkTimeout(connection, validationTimeout);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 驱动检查，连接检查方式</span></span><br><span class="line">    checkDriverSupport(connection);</span><br><span class="line">    <span class="comment">// 设置只读与事物自动提交</span></span><br><span class="line">    connection.setReadOnly(isReadOnly);</span><br><span class="line">    connection.setAutoCommit(isAutoCommit);</span><br><span class="line">    <span class="comment">// 设置默认的事物隔离</span></span><br><span class="line">    <span class="keyword">if</span> (transactionIsolation != defaultTransactionIsolation) &#123;</span><br><span class="line">        connection.setTransactionIsolation(transactionIsolation);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// catalog:为支持catalog概念的db设置默认的catalog</span></span><br><span class="line">    <span class="comment">// MySQL、Oracle都不支持catalog，支持的有DB2、MS SQL Server</span></span><br><span class="line">    <span class="keyword">if</span> (catalog != <span class="keyword">null</span>) &#123;</span><br><span class="line">        connection.setCatalog(catalog);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// connectionInitSql是创建连接后执行的SQL，用于判断连接是否成功，默认为空</span></span><br><span class="line">    executeSql(connection, config.getConnectionInitSql(), <span class="keyword">true</span>);</span><br><span class="line"></span><br><span class="line">    setNetworkTimeout(connection, networkTimeout);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ol start="3">
+<li>关闭连接</li>
+</ol>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 译：悄悄或者偷偷的关闭连接，后台任务关闭连接</span></span><br><span class="line"><span class="comment"> * 调用场景:</span></span><br><span class="line"><span class="comment"> * 1. closeConnection时,后台任务销毁连接(连接超过最大空闲时间，被标记为evict等)</span></span><br><span class="line"><span class="comment"> * 2. 关闭线程池时，当指定销毁连接任务池失败后调用</span></span><br><span class="line"><span class="comment"> * 3. newConnection失败后，若连接不为null，则关闭连接</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> connection</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> closureReason</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">quietlyCloseConnection</span><span class="params">(<span class="keyword">final</span> Connection connection, <span class="keyword">final</span> String closureReason)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (connection != <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            LOGGER.debug(<span class="string">&quot;&#123;&#125; - Closing connection &#123;&#125;: &#123;&#125;&quot;</span>, poolName, connection, closureReason);</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                setNetworkTimeout(connection, SECONDS.toMillis(<span class="number">15</span>));</span><br><span class="line">            &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                connection.close(); <span class="comment">// continue with the close even if setNetworkTimeout() throws</span></span><br><span class="line">            &#125;</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">            LOGGER.debug(<span class="string">&quot;&#123;&#125; - Closing connection &#123;&#125; failed&quot;</span>, poolName, connection, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://images.effiu.cn/blog/other/hikaricp/01.png" alt="PoolBase的类图"></p>
+<p>从上图可知，<code>PoolBase</code>中没有暴露关于连接池的<code>public</code>方法。大部分时<code>private</code>方法，以及部分``abstract<code>方法和缺省修饰符的方法。其只是一个基础类，继承</code>PoolBase`的类才是真正可用的连接池。</p>
+<h2 id="3-PoolEntry"><a href="#3-PoolEntry" class="headerlink" title="3. PoolEntry"></a>3. PoolEntry</h2><p>是一个包装了<code>Connection</code>的<code>final</code>类。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">final</span> <span class="class"><span class="keyword">class</span> <span class="title">PoolEntry</span> <span class="keyword">implements</span> <span class="title">IConcurrentBagEntry</span> </span>&#123;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 连接实例</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">	Connection connection;</span><br><span class="line">   </span><br><span class="line">	<span class="comment">//······ 省略</span></span><br><span class="line">   </span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 定时任务，当超过最大生存时间时销毁连接。ScheduledFuture非PoolEntry创建，而是由连接池创建</span></span><br><span class="line"><span class="comment">     * 连接池创建连接时，将PoolEntry的销毁任务加入到endOfLife中去。</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">	<span class="keyword">private</span> <span class="keyword">volatile</span> ScheduledFuture&lt;?&gt; endOfLife;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * statement数量</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> FastList&lt;Statement&gt; openStatements;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 连接池，用于将该连接归还连接池、销毁或者关闭连接</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> HikariPool hikariPool;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * STATE_NOT_IN_USE = 0;</span></span><br><span class="line"><span class="comment">     * STATE_IN_USE = 1;</span></span><br><span class="line"><span class="comment">     * STATE_REMOVED = -1;</span></span><br><span class="line"><span class="comment">     * STATE_RESERVED = -2;</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">	<span class="keyword">private</span> <span class="keyword">final</span> AtomicInteger state;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">//······ 省略</span></span><br><span class="line">    </span><br><span class="line">    PoolEntry(<span class="keyword">final</span> Connection connection, <span class="keyword">final</span> PoolBase pool, <span class="keyword">final</span> <span class="keyword">boolean</span> isReadOnly, <span class="keyword">final</span> <span class="keyword">boolean</span> isAutoCommit) &#123;</span><br><span class="line">        <span class="keyword">this</span>.connection = connection;</span><br><span class="line">        <span class="keyword">this</span>.hikariPool = (HikariPool) pool;</span><br><span class="line">        <span class="keyword">this</span>.isReadOnly = isReadOnly;</span><br><span class="line">        <span class="keyword">this</span>.isAutoCommit = isAutoCommit;</span><br><span class="line">        <span class="comment">// 状态</span></span><br><span class="line">        <span class="keyword">this</span>.state = <span class="keyword">new</span> AtomicInteger();</span><br><span class="line">        <span class="comment">// 最后借出时间默认为当前的时间戳，即创建时间</span></span><br><span class="line">        <span class="keyword">this</span>.lastAccessed = ClockSource.INSTANCE.currentTime();</span><br><span class="line">        <span class="comment">//默认最多创建16个Statements</span></span><br><span class="line">        <span class="keyword">this</span>.openStatements = <span class="keyword">new</span> FastList&lt;&gt;(Statement.class, <span class="number">16</span>);</span><br><span class="line">	&#125;</span><br><span class="line">    <span class="comment">//······ 省略</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="4-HikariPool"><a href="#4-HikariPool" class="headerlink" title="4. HikariPool"></a>4. HikariPool</h2><p><code>HikariPool</code>是真正的连接池，提供了连接池的大部分行为。下面是部分源码:</p>
+<p>连接池的初始化过程，创建Executor(创建连接的任务<code>addConnectionExecutor</code>、销毁连接任务<code>closeConnectionExecutor</code>、维护连接池内的空闲连接任务<code>houseKeepingExecutorService</code>、<code>leakTask</code>等)</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">HikariPool</span> <span class="keyword">extends</span> <span class="title">PoolBase</span> <span class="keyword">implements</span> <span class="title">HikariPoolMXBean</span>, <span class="title">IBagStateListener</span> </span>&#123;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 记录当前可使用连接总数</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> AtomicInteger totalConnections;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * PoolEntry创建任务</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ThreadPoolExecutor addConnectionExecutor;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 关闭连接池内连接的Executor</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ThreadPoolExecutor closeConnectionExecutor;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 用于维护连接池内的空闲连接，超过minimumIdle部分将会被销毁</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ScheduledThreadPoolExecutor houseKeepingExecutorService;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ConcurrentBag&lt;PoolEntry&gt; connectionBag;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 连接泄漏任务检测</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ProxyLeakTask leakTask;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 对信号量&#123;<span class="doctag">@link</span> java.util.concurrent.Semaphore&#125;的封装</span></span><br><span class="line"><span class="comment">     * 当信号量许可证已满时，获取连接等操作会被阻塞</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> SuspendResumeLock suspendResumeLock;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">HikariPool</span><span class="params">(<span class="keyword">final</span> HikariConfig config)</span></span>&#123;</span><br><span class="line">        <span class="comment">// 调用PoolBase</span></span><br><span class="line">        <span class="keyword">super</span>(config);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">this</span>.connectionBag = <span class="keyword">new</span> ConcurrentBag&lt;&gt;(<span class="keyword">this</span>);</span><br><span class="line">        <span class="keyword">this</span>.totalConnections = <span class="keyword">new</span> AtomicInteger();</span><br><span class="line">        <span class="comment">// 可以通过配置更新，getConnection()方法是否会阻塞</span></span><br><span class="line">        <span class="keyword">this</span>.suspendResumeLock = config.isAllowPoolSuspension() ? <span class="keyword">new</span> SuspendResumeLock() : SuspendResumeLock.FAUX_LOCK;</span><br><span class="line"></span><br><span class="line">        <span class="comment">//······ 省略</span></span><br><span class="line"></span><br><span class="line">        <span class="comment">// 尝试创建一个连接并关闭。创建连接池时检查是否可以建立连接</span></span><br><span class="line">        checkFailFast();</span><br><span class="line"></span><br><span class="line">        ThreadFactory threadFactory = config.getThreadFactory();</span><br><span class="line">        <span class="comment">/**</span></span><br><span class="line"><span class="comment">         * 创建数据库连接任务,maximumPoolSize为阻塞队列大小、拒绝策略为丢弃</span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="keyword">this</span>.addConnectionExecutor = createThreadPoolExecutor(config.getMaximumPoolSize(), poolName + <span class="string">&quot; connection adder&quot;</span>, threadFactory, <span class="keyword">new</span> ThreadPoolExecutor.DiscardPolicy());</span><br><span class="line">        <span class="comment">/**</span></span><br><span class="line"><span class="comment">         * 关闭连接任务</span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="keyword">this</span>.closeConnectionExecutor = createThreadPoolExecutor(config.getMaximumPoolSize(), poolName + <span class="string">&quot; connection closer&quot;</span>, threadFactory, <span class="keyword">new</span> ThreadPoolExecutor.CallerRunsPolicy());</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (config.getScheduledExecutorService() == <span class="keyword">null</span>) &#123;</span><br><span class="line">            threadFactory = threadFactory != <span class="keyword">null</span> ? threadFactory : <span class="keyword">new</span> DefaultThreadFactory(poolName + <span class="string">&quot; housekeeper&quot;</span>, <span class="keyword">true</span>);</span><br><span class="line">            <span class="keyword">this</span>.houseKeepingExecutorService = <span class="keyword">new</span> ScheduledThreadPoolExecutor(<span class="number">1</span>, threadFactory, <span class="keyword">new</span> ThreadPoolExecutor.DiscardPolicy());</span><br><span class="line">            <span class="comment">// 当houseKeepingExecutorService的shutdown方法被调用时，不再执行线程池内的任务</span></span><br><span class="line">            <span class="keyword">this</span>.houseKeepingExecutorService.setExecuteExistingDelayedTasksAfterShutdownPolicy(<span class="keyword">false</span>);</span><br><span class="line">            <span class="comment">// 取消任务时立即从任务池中移除任务</span></span><br><span class="line">            <span class="keyword">this</span>.houseKeepingExecutorService.setRemoveOnCancelPolicy(<span class="keyword">true</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">            <span class="keyword">this</span>.houseKeepingExecutorService = config.getScheduledExecutorService();</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">// 设置延时任务池的延时时间以及执行的command</span></span><br><span class="line">        <span class="keyword">this</span>.houseKeepingExecutorService.scheduleWithFixedDelay(<span class="keyword">new</span> HouseKeeper(), <span class="number">0L</span>, HOUSEKEEPING_PERIOD_MS, MILLISECONDS);</span><br><span class="line">        <span class="comment">// 创建防止连接泄漏的任务</span></span><br><span class="line">        <span class="keyword">this</span>.leakTask = <span class="keyword">new</span> ProxyLeakTask(config.getLeakDetectionThreshold(), houseKeepingExecutorService);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>// 从连接池中获取链接的过程</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">final</span> Connection <span class="title">getConnection</span><span class="params">(<span class="keyword">final</span> <span class="keyword">long</span> hardTimeout)</span> <span class="keyword">throws</span> SQLException</span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 获取一个许可证，当达到最大时会阻塞</span></span><br><span class="line">    suspendResumeLock.acquire();</span><br><span class="line">    <span class="keyword">final</span> <span class="keyword">long</span> startTime = clockSource.currentTime();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="keyword">long</span> timeout = hardTimeout;</span><br><span class="line">        <span class="keyword">do</span> &#123;</span><br><span class="line">            <span class="keyword">final</span> PoolEntry poolEntry = connectionBag.borrow(timeout, MILLISECONDS);</span><br><span class="line">            <span class="keyword">if</span> (poolEntry == <span class="keyword">null</span>) &#123;</span><br><span class="line">                <span class="keyword">break</span>; <span class="comment">// We timed out... break and throw exception</span></span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">final</span> <span class="keyword">long</span> now = clockSource.currentTime();</span><br><span class="line">            <span class="comment">// 判断借到的连接是否可用</span></span><br><span class="line">            <span class="keyword">if</span> (poolEntry.isMarkedEvicted() || (clockSource.elapsedMillis(poolEntry.lastAccessed, now) &gt; ALIVE_BYPASS_WINDOW_MS &amp;&amp; !isConnectionAlive(poolEntry.connection))) &#123;</span><br><span class="line">                closeConnection(poolEntry, <span class="string">&quot;(connection is evicted or dead)&quot;</span>); <span class="comment">// Throw away the dead connection (passed max age or failed alive test)</span></span><br><span class="line">                timeout = hardTimeout - clockSource.elapsedMillis(startTime);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span> &#123;</span><br><span class="line">                metricsTracker.recordBorrowStats(poolEntry, startTime);</span><br><span class="line">                <span class="keyword">return</span> poolEntry.createProxyConnection(leakTask.schedule(poolEntry), now);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// timeout = hardTimeout - 当前时间戳，即超过了入参规定的时间</span></span><br><span class="line">        &#125; <span class="keyword">while</span> (timeout &gt; <span class="number">0L</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> SQLException(poolName + <span class="string">&quot; - Interrupted during connection acquisition&quot;</span>, e);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">finally</span> &#123;</span><br><span class="line">        suspendResumeLock.release();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    logPoolState(<span class="string">&quot;Timeout failure &quot;</span>);</span><br><span class="line">    metricsTracker.recordConnectionTimeout();</span><br><span class="line"></span><br><span class="line">    String sqlState = <span class="keyword">null</span>;</span><br><span class="line">    <span class="comment">// 异常处理</span></span><br><span class="line">    <span class="keyword">final</span> Throwable originalException = getLastConnectionFailure();</span><br><span class="line">    <span class="keyword">if</span> (originalException <span class="keyword">instanceof</span> SQLException) &#123;</span><br><span class="line">        sqlState = ((SQLException) originalException).getSQLState();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">final</span> SQLException connectionException = <span class="keyword">new</span> SQLTransientConnectionException(poolName + <span class="string">&quot; - Connection is not available, request timed out after &quot;</span> + clockSource.elapsedMillis(startTime) + <span class="string">&quot;ms.&quot;</span>, sqlState, originalException);</span><br><span class="line">    <span class="keyword">if</span> (originalException <span class="keyword">instanceof</span> SQLException) &#123;</span><br><span class="line">        connectionException.setNextException((SQLException) originalException);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">throw</span> connectionException;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>关闭连接池:关闭连接池、关闭所有空闲连接，且终止或者关闭存活的连接，关闭创建的所有Executor等。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">shutdown</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException</span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">// 连接池状态</span></span><br><span class="line">        poolState = POOL_SHUTDOWN;</span><br><span class="line"></span><br><span class="line">        LOGGER.info(<span class="string">&quot;&#123;&#125; - Close initiated...&quot;</span>, poolName);</span><br><span class="line">        logPoolState(<span class="string">&quot;Before closing &quot;</span>);</span><br><span class="line">        <span class="comment">// 标记池内所有连接</span></span><br><span class="line">        softEvictConnections();</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 关闭创建连接执行器，逐个关闭线程池内的任务</span></span><br><span class="line">        addConnectionExecutor.shutdown();</span><br><span class="line">        <span class="comment">// 关闭线程池内锁中的等待队列中的任务</span></span><br><span class="line">        addConnectionExecutor.awaitTermination(<span class="number">5L</span>, SECONDS);</span><br><span class="line">        <span class="comment">// 关闭维护minimumIdleSize的线程池执行器以及任务</span></span><br><span class="line">        <span class="keyword">if</span> (config.getScheduledExecutorService() == <span class="keyword">null</span> &amp;&amp; houseKeepingExecutorService != <span class="keyword">null</span>) &#123;</span><br><span class="line">            houseKeepingExecutorService.shutdown();</span><br><span class="line">            houseKeepingExecutorService.awaitTermination(<span class="number">5L</span>, SECONDS);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        connectionBag.close();</span><br><span class="line">        <span class="comment">// 杀死连接执行器</span></span><br><span class="line">        <span class="keyword">final</span> ExecutorService assassinExecutor = createThreadPoolExecutor(config.getMaximumPoolSize(), poolName + <span class="string">&quot; connection assassinator&quot;</span>,</span><br><span class="line">                                                                          config.getThreadFactory(), <span class="keyword">new</span> ThreadPoolExecutor.CallerRunsPolicy());</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="keyword">final</span> <span class="keyword">long</span> start = clockSource.currentTime();</span><br><span class="line">            <span class="keyword">do</span> &#123;</span><br><span class="line">                abortActiveConnections(assassinExecutor);</span><br><span class="line">                <span class="comment">// 标记连接为被销毁状态</span></span><br><span class="line">                softEvictConnections();</span><br><span class="line">            &#125; <span class="keyword">while</span> (getTotalConnections() &gt; <span class="number">0</span> &amp;&amp; clockSource.elapsedMillis(start) &lt; SECONDS.toMillis(<span class="number">5</span>));</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">finally</span> &#123;</span><br><span class="line">            assassinExecutor.shutdown();</span><br><span class="line">            assassinExecutor.awaitTermination(<span class="number">5L</span>, SECONDS);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        shutdownNetworkTimeoutExecutor();</span><br><span class="line">        closeConnectionExecutor.shutdown();</span><br><span class="line">        closeConnectionExecutor.awaitTermination(<span class="number">5L</span>, SECONDS);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">finally</span> &#123;</span><br><span class="line">        logPoolState(<span class="string">&quot;After closing &quot;</span>);</span><br><span class="line">        unregisterMBeans();</span><br><span class="line">        metricsTracker.close();</span><br><span class="line">        LOGGER.info(<span class="string">&quot;&#123;&#125; - Closed.&quot;</span>, poolName);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>关闭连接</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 译：永久关闭指定连接(吞掉任何异常)</span></span><br><span class="line"><span class="comment"> * 以下几种情况会调用closeConnection方法</span></span><br><span class="line"><span class="comment"> *    1. 连接被标记为evict</span></span><br><span class="line"><span class="comment"> *    2. 连接超过最大可空闲时间，houseKeeper任务</span></span><br><span class="line"><span class="comment"> *    3. 连接被借用后发现不可用，getConnection()获取链接方法</span></span><br><span class="line"><span class="comment"> *    4. evict方法</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">final</span> <span class="keyword">void</span> <span class="title">closeConnection</span><span class="params">(<span class="keyword">final</span> PoolEntry poolEntry, <span class="keyword">final</span> String closureReason)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (connectionBag.remove(poolEntry)) &#123;</span><br><span class="line">        <span class="keyword">final</span> <span class="keyword">int</span> tc = totalConnections.decrementAndGet();</span><br><span class="line">        <span class="keyword">if</span> (tc &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            LOGGER.warn(<span class="string">&quot;&#123;&#125; - Unexpected value of totalConnections=&#123;&#125;&quot;</span>, poolName, tc, <span class="keyword">new</span> Exception());</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">final</span> Connection connection = poolEntry.close();</span><br><span class="line">        <span class="comment">// 关闭connection的任务交给另外的线程</span></span><br><span class="line">        closeConnectionExecutor.execute(<span class="keyword">new</span> Runnable() &#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">                quietlyCloseConnection(connection, closureReason);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>HouseKeeper任务，清理超过最大空闲时间的连接</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 译：用于清理空闲连接(超过minimumIdle部分)</span></span><br><span class="line"><span class="comment"> * The house keeping task to retire idle connections.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">private</span> <span class="class"><span class="keyword">class</span> <span class="title">HouseKeeper</span> <span class="keyword">implements</span> <span class="title">Runnable</span></span></span><br><span class="line"><span class="class"></span>&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> <span class="keyword">long</span> previous = clockSource.plusMillis(clockSource.currentTime(), -HOUSEKEEPING_PERIOD_MS);</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="comment">// refresh timeouts in case they changed via MBean</span></span><br><span class="line">        connectionTimeout = config.getConnectionTimeout();</span><br><span class="line">        validationTimeout = config.getValidationTimeout();</span><br><span class="line">        leakTask.updateLeakDetectionThreshold(config.getLeakDetectionThreshold());</span><br><span class="line">        <span class="comment">// 连接池中空闲状态连接的最长时间</span></span><br><span class="line">        <span class="keyword">final</span> <span class="keyword">long</span> idleTimeout = config.getIdleTimeout();</span><br><span class="line">        <span class="keyword">final</span> <span class="keyword">long</span> now = clockSource.currentTime();</span><br><span class="line"></span><br><span class="line">        <span class="comment">// Detect retrograde time, allowing +128ms as per NTP spec.</span></span><br><span class="line">        <span class="keyword">if</span> (clockSource.plusMillis(now, <span class="number">128</span>) &lt; clockSource.plusMillis(previous, HOUSEKEEPING_PERIOD_MS)) &#123;</span><br><span class="line">            LOGGER.warn(<span class="string">&quot;&#123;&#125; - Retrograde clock change detected (housekeeper delta=&#123;&#125;), soft-evicting connections from pool.&quot;</span>,</span><br><span class="line">                        clockSource.elapsedDisplayString(previous, now), poolName);</span><br><span class="line">            previous = now;</span><br><span class="line">            softEvictConnections();</span><br><span class="line">            fillPool();</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (now &gt; clockSource.plusMillis(previous, (<span class="number">3</span> * HOUSEKEEPING_PERIOD_MS) / <span class="number">2</span>)) &#123;</span><br><span class="line">            <span class="comment">// No point evicting for forward clock motion, this merely accelerates connection retirement anyway</span></span><br><span class="line">            LOGGER.warn(<span class="string">&quot;&#123;&#125; - Thread starvation or clock leap detected (housekeeper delta=&#123;&#125;).&quot;</span>, clockSource.elapsedDisplayString(previous, now), poolName);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        previous = now;</span><br><span class="line"></span><br><span class="line">        String afterPrefix = <span class="string">&quot;Pool &quot;</span>;</span><br><span class="line">        <span class="keyword">if</span> (idleTimeout &gt; <span class="number">0L</span>) &#123;</span><br><span class="line">            <span class="comment">// 从队列中获取STATE_NOT_IN_USE的连接</span></span><br><span class="line">            <span class="keyword">final</span> List&lt;PoolEntry&gt; idleList = connectionBag.values(STATE_NOT_IN_USE);</span><br><span class="line">            <span class="keyword">int</span> removable = idleList.size() - config.getMinimumIdle();</span><br><span class="line">            <span class="comment">// 当未被使用的连接大于minIdle时</span></span><br><span class="line">            <span class="keyword">if</span> (removable &gt; <span class="number">0</span>) &#123;</span><br><span class="line">                logPoolState(<span class="string">&quot;Before cleanup &quot;</span>);</span><br><span class="line">                afterPrefix = <span class="string">&quot;After cleanup  &quot;</span>;</span><br><span class="line"></span><br><span class="line">                <span class="comment">// Sort pool entries on lastAccessed</span></span><br><span class="line">                <span class="comment">// 根据最近访问时间增序排序</span></span><br><span class="line">                Collections.sort(idleList, LAST_ACCESS_COMPARABLE);</span><br><span class="line">                <span class="keyword">for</span> (PoolEntry poolEntry : idleList) &#123;</span><br><span class="line">                    <span class="comment">// 若上次使用时间大于idleTimeout，则修改poolEntry状态</span></span><br><span class="line">                    <span class="keyword">if</span> (clockSource.elapsedMillis(poolEntry.lastAccessed, now) &gt; idleTimeout &amp;&amp; connectionBag.reserve(poolEntry)) &#123;</span><br><span class="line">                        <span class="comment">// 关闭连接</span></span><br><span class="line">                        closeConnection(poolEntry, <span class="string">&quot;(connection has passed idleTimeout)&quot;</span>);</span><br><span class="line">                        <span class="keyword">if</span> (--removable == <span class="number">0</span>) &#123;</span><br><span class="line">                            <span class="keyword">break</span>; <span class="comment">// keep min idle cons</span></span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        logPoolState(afterPrefix);</span><br><span class="line"></span><br><span class="line">        fillPool(); <span class="comment">// Try to maintain minimum connections</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="5-ConcurrentBag"><a href="#5-ConcurrentBag" class="headerlink" title="5. ConcurrentBag"></a>5. ConcurrentBag</h2><p><code>ConcurrentBag</code>是一个用于<code>HikariPool</code>的特殊的并发类，其实现了<code>LinkedBlockingDeque</code>和<code>LinkedTransferQueue</code>。这是一个定制化的无锁的实现，使用**AQS(AbstractQueuedLongSynchronizer)**同步器管理跨线程的通信。部分源码如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * PoolEntry实现了该接口，poolEntry的状态</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">interface</span> <span class="title">IConcurrentBagEntry</span></span></span><br><span class="line"><span class="class"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> STATE_NOT_IN_USE = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">int</span> STATE_IN_USE = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">int</span> STATE_REMOVED = -<span class="number">1</span>;</span><br><span class="line">    <span class="keyword">int</span> STATE_RESERVED = -<span class="number">2</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">boolean</span> <span class="title">compareAndSet</span><span class="params">(<span class="keyword">int</span> expectState, <span class="keyword">int</span> newState)</span></span>;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">lazySet</span><span class="params">(<span class="keyword">int</span> newState)</span></span>;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">getState</span><span class="params">()</span></span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>HikariPool#getConnection(long)</code>内会调用<code>borrow</code>方法尝试获取可用连接，在<code>borrow</code>中会首先尝试从<code>getConnection</code>方法调用者的<code>threadList</code>中寻找可用连接，否则再从<code>sharedList</code>中获取连接</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> T <span class="title">borrow</span><span class="params">(<span class="keyword">long</span> timeout, <span class="keyword">final</span> TimeUnit timeUnit)</span> <span class="keyword">throws</span> InterruptedException</span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 当调用borrow时首先查看调用者线程是否释放了可用连接</span></span><br><span class="line">    <span class="comment">// Try the thread-local list first</span></span><br><span class="line">    List&lt;Object&gt; list = threadList.get();</span><br><span class="line">    <span class="keyword">if</span> (weakThreadLocals &amp;&amp; list == <span class="keyword">null</span>) &#123;</span><br><span class="line">        list = <span class="keyword">new</span> ArrayList&lt;&gt;(<span class="number">16</span>);</span><br><span class="line">        threadList.set(list);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 从尾部获取，类似于剽窃算法(fork/join)</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = list.size() - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i--) &#123;</span><br><span class="line">        <span class="comment">// 移除当前元素，长度减1</span></span><br><span class="line">        <span class="keyword">final</span> Object entry = list.remove(i);</span><br><span class="line">        <span class="meta">@SuppressWarnings(&quot;unchecked&quot;)</span></span><br><span class="line">        <span class="keyword">final</span> T bagEntry = weakThreadLocals ? ((WeakReference&lt;T&gt;) entry).get() : (T) entry;</span><br><span class="line">        <span class="comment">// 若threadList中的poolEntry非空且set state成功</span></span><br><span class="line">        <span class="keyword">if</span> (bagEntry != <span class="keyword">null</span> &amp;&amp; bagEntry.compareAndSet(STATE_NOT_IN_USE, STATE_IN_USE)) &#123;</span><br><span class="line">            <span class="keyword">return</span> bagEntry;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 若调用者线程没有可用连接，则从shareList中获取连接</span></span><br><span class="line">    <span class="comment">// Otherwise, scan the shared list ... for maximum of timeout</span></span><br><span class="line">    timeout = timeUnit.toNanos(timeout);</span><br><span class="line">    Future&lt;Boolean&gt; addItemFuture = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">final</span> <span class="keyword">long</span> startScan = System.nanoTime();</span><br><span class="line">    <span class="keyword">final</span> <span class="keyword">long</span> originTimeout = timeout;</span><br><span class="line">    <span class="keyword">long</span> startSeq;</span><br><span class="line">    <span class="comment">// 等待+1</span></span><br><span class="line">    waiters.incrementAndGet();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="keyword">do</span> &#123;</span><br><span class="line">            <span class="comment">// scan the shared list</span></span><br><span class="line">            <span class="keyword">do</span> &#123;</span><br><span class="line">                <span class="comment">// 获取当前计数值</span></span><br><span class="line">                startSeq = synchronizer.currentSequence();</span><br><span class="line">                <span class="keyword">for</span> (T bagEntry : sharedList) &#123;</span><br><span class="line">                    <span class="comment">// 遍历shardList，确定可用的连接</span></span><br><span class="line">                    <span class="keyword">if</span> (bagEntry.compareAndSet(STATE_NOT_IN_USE, STATE_IN_USE)) &#123;</span><br><span class="line">                        <span class="comment">// if we might have stolen another thread&#x27;s new connection, restart the add...</span></span><br><span class="line">                        <span class="comment">// 若当前等待连接数大于1且不存在创建连接任务，则创建poolEntry给其他waiter使用</span></span><br><span class="line">                        <span class="keyword">if</span> (waiters.get() &gt; <span class="number">1</span> &amp;&amp; addItemFuture == <span class="keyword">null</span>) &#123;</span><br><span class="line">                            <span class="comment">// HikariPool实现了IBagStateListener，是将创建poolEntry的任务添加到addConnectionExecutor中</span></span><br><span class="line">                            <span class="comment">// 会将poolEntry添加到shareList中</span></span><br><span class="line">                            listener.addBagItem();</span><br><span class="line">                        &#125;</span><br><span class="line">                        <span class="keyword">return</span> bagEntry;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">while</span> (startSeq &lt; synchronizer.currentSequence());</span><br><span class="line">            <span class="comment">// 若执行到此处说明没有获取到可用连接</span></span><br><span class="line">            <span class="keyword">if</span> (addItemFuture == <span class="keyword">null</span> || addItemFuture.isDone()) &#123;</span><br><span class="line">                <span class="comment">// 说明当前没有创建poolEntry的任务，将poolEntry添加到shareList中去</span></span><br><span class="line">                addItemFuture = listener.addBagItem();</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 更新timeout，用于超时结束循环</span></span><br><span class="line">            timeout = originTimeout - (System.nanoTime() - startScan);</span><br><span class="line">        &#125; <span class="keyword">while</span> (timeout &gt; <span class="number">10_000L</span> &amp;&amp; synchronizer.waitUntilSequenceExceeded(startSeq, timeout));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">finally</span> &#123;</span><br><span class="line">        waiters.decrementAndGet();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="6-启动过程"><a href="#6-启动过程" class="headerlink" title="6. 启动过程"></a>6. 启动过程</h2><p>使用HikariCP需要一些简单的配置，具体如下:</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Bean</span></span><br><span class="line"><span class="meta">@ConfigurationProperties(&quot;datasource&quot;)</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">DataSourceConfig</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> HikariConfig hikariCP;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Autowired</span></span><br><span class="line"><span class="keyword">private</span> DataSourceConfig dataSourceConfig;</span><br><span class="line"></span><br><span class="line"><span class="meta">@Bean</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> DataSource <span class="title">dataSource</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">//datasourceConfig是一个Config类</span></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">new</span> HikariDataSource(datasourceConfig);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">datasource:</span></span><br><span class="line">  <span class="attr">hikariCP:</span></span><br><span class="line">	<span class="attr">driverClassName:</span> <span class="string">com.mysql.cj.jdbc.Driver</span></span><br><span class="line">	<span class="attr">type:</span> <span class="string">com.zaxxer.hikari.HikariDataSource</span></span><br><span class="line">	<span class="attr">jdbcUrl:</span> <span class="string">jdbc:mysql://127.0.0.1:3318/db_name?serverTimezone=Asia/Shanghai&amp;zeroDateTimeBehavior=CONVERT_TO_NULL&amp;characterEncoding=utf8&amp;allowMultiQueries=true</span></span><br><span class="line">	<span class="attr">username:</span> <span class="string">your_name</span></span><br><span class="line">	<span class="attr">password:</span> <span class="string">your_password</span></span><br><span class="line">	<span class="attr">connectionTimeout:</span> <span class="number">30000</span></span><br><span class="line">	<span class="attr">minIdle:</span> <span class="number">2</span></span><br><span class="line">	<span class="attr">maxPoolSize:</span> <span class="number">2</span></span><br><span class="line">	<span class="attr">connectionInitSql:</span> <span class="string">set</span> <span class="string">names</span> <span class="string">utf8mb4</span></span><br></pre></td></tr></table></figure>
+
+<p>我们设置jdbcUrl为错误的连接，查看启动报错的异常栈，可以查看启动类的调用过程。具体如下:</p>
+<p><img src="https://images.effiu.cn/blog/other/hikaricp/03.png" alt="hikariCp启动过程"></p>
+<p>上面创建Hikari连接池，其是调用<code>com.zaxxer.hikari.HikariDataSource#HikariDataSource(com.zaxxer.hikari.HikariConfig)</code>的构造方法。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">HikariDataSource</span><span class="params">(HikariConfig configuration)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    configuration.validate();</span><br><span class="line">    configuration.copyState(<span class="keyword">this</span>);</span><br><span class="line"></span><br><span class="line">    LOGGER.info(<span class="string">&quot;&#123;&#125; - Started.&quot;</span>, configuration.getPoolName());</span><br><span class="line">    pool = fastPathPool = <span class="keyword">new</span> HikariPool(<span class="keyword">this</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后调用<code>HikariPool</code>的构造方法，其会在创建连接池时检查数据库是否可以正常连接<code>checkFailFast()</code></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">private void checkFailFast()</span><br><span class="line">&#123;</span><br><span class="line">	if (config.isInitializationFailFast()) &#123;</span><br><span class="line">        try &#123;</span><br><span class="line">        &#x2F;&#x2F; 尝试创建一个连接，并关闭</span><br><span class="line">        newConnection().close();</span><br><span class="line">        &#125;</span><br><span class="line">        catch (Throwable e) &#123;</span><br><span class="line">            try &#123;</span><br><span class="line">                shutdown();</span><br><span class="line">            &#125;</span><br><span class="line">            catch (Throwable ex) &#123;</span><br><span class="line">                e.addSuppressed(ex);</span><br><span class="line">            &#125;</span><br><span class="line">            throw new PoolInitializationException(e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在<code>newConnection()</code>过程中，会抛出异常</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Connection <span class="title">newConnection</span><span class="params">()</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">    Connection connection = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        String username = config.getUsername();</span><br><span class="line">        String password = config.getPassword();</span><br><span class="line"></span><br><span class="line">        connection = (username == <span class="keyword">null</span>) ? dataSource.getConnection() : dataSource.getConnection(username, password);</span><br><span class="line">        <span class="comment">// 设置一些初始值或者状态，例如超时时间、自动提交、事物隔离级别、连接检查等</span></span><br><span class="line">        setupConnection(connection);</span><br><span class="line">        lastConnectionFailure.set(<span class="keyword">null</span>);</span><br><span class="line">        <span class="keyword">return</span> connection;</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        lastConnectionFailure.set(e);</span><br><span class="line">        quietlyCloseConnection(connection, <span class="string">&quot;(Failed to create/set connection)&quot;</span>);</span><br><span class="line">        <span class="keyword">throw</span> e;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="7-获取数据库连接过程"><a href="#7-获取数据库连接过程" class="headerlink" title="7. 获取数据库连接过程"></a>7. 获取数据库连接过程</h2><p><code>com.zaxxer.hikari.HikariDataSource#getConnection()</code>方法调用<code>HikariPool.getConnection()</code>方法，其是调用<code>com.zaxxer.hikari.util.ConcurrentBag#borrow</code>方法获取可用连接。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java/" rel="tag"># java</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/04/19/web/14-springmvc/" rel="prev" title="Spring MVC的工作机制与设计模式">
+      <i class="fa fa-chevron-left"></i> Spring MVC的工作机制与设计模式
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/07/16/mysql/12_innodb_lock/" rel="next" title="InnoDB lock">
+      InnoDB lock <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

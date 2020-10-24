@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="在Class文件格式与执行引擎这部分中，用户能直接影响的内容并不太多，Class文件以何种形式存储，类型何时加载、如何连接，以及虚拟机如何执行字节码指令等都是由虚拟机直接控制的行为，用户无法改变。用户能通过程序操作的，主要是字节码生成与类加载器这两部分。 下面是4个关于类加载与执行子系统的案例。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="类加载与执行子系统案例">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/06/jvm/9_classloader_case/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="在Class文件格式与执行引擎这部分中，用户能直接影响的内容并不太多，Class文件以何种形式存储，类型何时加载、如何连接，以及虚拟机如何执行字节码指令等都是由虚拟机直接控制的行为，用户无法改变。用户能通过程序操作的，主要是字节码生成与类加载器这两部分。 下面是4个关于类加载与执行子系统的案例。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/28.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/jvm/29.png">
+<meta property="article:published_time" content="2019-08-05T16:08:00.000Z">
+<meta property="article:modified_time" content="2019-08-05T16:08:45.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="JVM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/jvm/28.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/06/jvm/9_classloader_case/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>类加载与执行子系统案例 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-Tomcat-%E6%AD%A3%E7%BB%9F%E7%9A%84%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E6%9E%B6%E6%9E%84"><span class="nav-number">1.</span> <span class="nav-text">1. Tomcat: 正统的类加载器架构</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-OSGi%EF%BC%9A%E7%81%B5%E6%B4%BB%E7%9A%84%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">2. OSGi：灵活的类加载器架构</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E5%AD%97%E8%8A%82%E7%A0%81%E7%94%9F%E6%88%90%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%8A%A8%E6%80%81%E4%BB%A3%E7%90%86%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">3. 字节码生成技术与动态代理的实现</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-%E6%89%8B%E5%8A%A8%E5%AE%9E%E7%8E%B0%E8%BF%9C%E7%A8%8B%E6%89%A7%E8%A1%8C%E5%8A%9F%E8%83%BD-page-289"><span class="nav-number">4.</span> <span class="nav-text">4. 手动实现远程执行功能(page 289)</span></a><ol class="nav-child"><li class="nav-item nav-level-6"><a class="nav-link" href="#1-%E7%9B%AE%E6%A0%87"><span class="nav-number">4.1.</span> <span class="nav-text">1. 目标</span></a></li><li class="nav-item nav-level-6"><a class="nav-link" href="#2-%E6%80%9D%E8%B7%AF"><span class="nav-number">4.2.</span> <span class="nav-text">2. 思路</span></a></li></ol></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E6%80%BB%E7%BB%93"><span class="nav-number">5.</span> <span class="nav-text">3. 总结</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/06/jvm/9_classloader_case/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          类加载与执行子系统案例
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-08-06 00:08 00:08:00 / Modified: 00:08:45" itemprop="dateCreated datePublished" datetime="2019-08-06T00:08:00+08:00">2019-08-06 00:08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/06/jvm/9_classloader_case/" class="post-meta-item leancloud_visitors" data-flag-title="类加载与执行子系统案例" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/06/jvm/9_classloader_case/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/06/jvm/9_classloader_case/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>在Class文件格式与执行引擎这部分中，用户能直接影响的内容并不太多，Class文件以何种形式存储，类型何时加载、如何连接，以及虚拟机如何执行字节码指令等都是由虚拟机直接控制的行为，用户无法改变。用户能通过程序操作的，主要是字节码生成与类加载器这两部分。</p>
+<p>下面是4个关于类加载与执行子系统的案例。</p>
+<a id="more"></a>
+
+<h5 id="1-Tomcat-正统的类加载器架构"><a href="#1-Tomcat-正统的类加载器架构" class="headerlink" title="1. Tomcat: 正统的类加载器架构"></a>1. Tomcat: 正统的类加载器架构</h5><p>主流的Java Web服务器，如<code>Tomcat</code>、<code>Jetty</code>、<code>WebLogic</code>、<code>WebSphere</code>等等都实现了自己定义的类加载器。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/28.png" alt="tomcat类加载"></p>
+<p>如上图所示，一个健全的Web服务器需要解决以下几个问题：</p>
+<ul>
+<li>部署在同一个Web服务器上的两个Web应用所使用Java类库可以实现相互隔离（两个Web应用可能会依赖同一个三方类库的不同版本）。</li>
+<li>部署在同一个服务器上的两个Web应用程序所使用的Java类库可以互相共享（不同Web应用可能会依赖同样的三方类库，类库不共享时，虚拟机的方法区会过度膨胀）。</li>
+<li>服务器需要尽可能地保证自身的安全不受部署的Web应用程序影响（服务器依赖的库与应用程序隔离开）。</li>
+<li>支持JSP应用的Web服务器，大多数都要执行HotSwap功能。</li>
+</ul>
+<p>基于上述问题，部署Web应用时，单独的一个ClassPath就无法满足需求了，所以各种Web服务器都提供了多个ClassPath保证用户存放第三方类库，一般以<code>lib</code>和<code>classes</code>命名。在不同的路径中的类库，具备不同的访问范围和服务对象，一般每一个目录都会有一个相应的自定义累加载器去加载放置在里面的Java类库。</p>
+<p>Tomcat目录结构中，有3组目录<code>/common/*</code>、<code>/server/*</code>、<code>/shared/*</code>可以存放Java类库，还包括Web应用自身的<code>/WEB-INF/*</code>，其含义如下：</p>
+<ul>
+<li><code>/common/*</code>，类库可被Tomcat和所有的Web应用程序共享</li>
+<li><code>/server/*</code>，类库可被Tomcat使用，对所有Web应用程序不可见</li>
+<li><code>/shared/*</code>，类库可以被所有的Web应用程序使用，对Tomcat不可见</li>
+<li><code>/WEB-INF/*</code>，仅仅对Web应用程序自身可见，对Tomcat和其他Web应用程序不可见</li>
+</ul>
+<p>为了支持对上述目录的类库进行加载和隔离，Tomcat按照双亲委派模型定义了多个类加载器。</p>
+<p><img src="https://images.effiu.cn/blog/jvm/29.png" alt="tomcat服务器类加载架构"></p>
+<p>上图中，前三个类加载器时JDK默认的类加载器。<code>CommonClassLoader</code>、<code>CatalinaClassLoader</code>、<code>SharedClassLoader</code>和<code>WebappClassLoader</code>是Tomcat自己定义的类加载器，分别加载<code>/common/*</code>、<code>/server/*</code>、<code>/shared/*</code>和<code>/WebApp/WEB-INF/*</code>下的Java类库，其中<code>WebapClassLoader</code>可能会存在多个实例，一个Web应用对应一个<code>WebappClassLoader</code>实例，每一个JSP文件对应一个Jsp类加载器。</p>
+<ul>
+<li><code>CommonClassLoader</code>可以加载的类，都可以被<code>CatelinaClassLoader</code>和<code>SharedClassLoader</code>使用。</li>
+<li><code>CatelinaClassLoader</code>和<code>SharedClassLoader</code>自己能加载的类则与对方相互隔离</li>
+<li><code>WebappClassLoader</code>可以使用<code>SharedClassLoader</code>加载到的类，但是各个<code>WebappClassLoader</code>之间相互隔离</li>
+<li><code>JspLoader</code>的加载范围仅仅是这个JSP文件所编译出来的那一个class，其出现的目的就是为了便于丢弃，当服务器检测到JSP文件被修改时，会替换掉目前的<code>JspLoader</code>的实例，并通过再建立一个新的Jsp类加载器实现JSP文件的HotSwap功能。</li>
+</ul>
+<p>目前Tomcat中需要指定<code>tomcat/conf/catalina.properties</code>中的<code>server.loader</code>和<code>shared.loader</code>才会真正建立<code>CatalinaClassLoader</code>和<code>SharedClassLoader</code>的实例。</p>
+<h5 id="2-OSGi：灵活的类加载器架构"><a href="#2-OSGi：灵活的类加载器架构" class="headerlink" title="2. OSGi：灵活的类加载器架构"></a>2. OSGi：灵活的类加载器架构</h5><ul>
+<li><input disabled="" type="checkbox"> 学习JavaEE规范，去看JBoss源码，学习类加载器，去看OSGi源码</li>
+</ul>
+<p>OSGi(Open Service GateWay Initiative)是OSGi联盟制定的一个基于Java语言的动态模块化规范，现已成为Java世界中模块化标准。OSGi中每个模块(Bundle)与普通的Java类库区别不大，都是以Jar封装，内部存储的是Java Package和Class。但是Bundle可以声明它所依赖的Java Package(通过Import-Package描述)，也可以声明它允许导出发布的Java Package(通过Export-Package描述)。<font color='red'>OSGi中，Bundle之间的依赖关系从传统的上层模块依赖底层模块转变为平级模块之间的依赖，类库的可见性得到精准控制</font>。Bundle中只有被Export过的Package才可以被访问，其他的Package和Class都会被隐藏起来。OSGi的另一个优点是：基于OSGi的程序很可能可以实现模块级的热插拔功能，当程序升级更新或者调试除错时，可以只停用、重新安装后启用程序的其中一部分。</p>
+<ul>
+<li>类库的可见性可以精准控制</li>
+<li>模块级的热插拔功能</li>
+</ul>
+<p>OSGi的优点，归功于其灵活的类加载器架构。Bundle类加载器之间只有规则，没有固定的委派关系。</p>
+<blockquote>
+<p>某个Bundle声明了一个它依赖的Package，当有其他Bundle声明发布了这个Package，那么所有对这个Packge的类加载动作都会委派给发布它的Bundle，当不涉及某个具体的Package时，各个Bundle加载器是平级关系，只有具体使用某个Package和Class时，才会根据Package导入导出定义来构造Bundle间的委派和依赖。<font color='red'>当一个Bundle类加载器为其他Bundle提供服务时，会根据Export-Package列表严格控制访问范围</font>。</p>
+</blockquote>
+<p>OSGi中类加载时查找规则如下：</p>
+<ul>
+<li>以<code>java.*</code>开头的类，委派给父类加载器加载</li>
+<li>否则，委派列表(Bundle需要其他加载器加载的类)名单内的类，委派给父类加载器加载</li>
+<li>否则，Import列表中的类，委派给Export这个类的Bundle的类加载器加载</li>
+<li>否则，查找当前Bundle的ClassPath，使用自己的类加载器加载</li>
+<li>否则，查找是否在自己的<strong>Fragment Bundle</strong>中，若是，则委派给<strong>Fragment Bundle</strong>的类加载器加载</li>
+<li>否则，查找<strong>Dynamic Import</strong>列表的Bundle，委派给对应的Bundle类加载加载</li>
+<li>否则，类查找失败</li>
+</ul>
+<p>OSGi里，加载器之间的关系不再是双亲委派模型的树形结构，而是一种更为复杂的、运行时才能确定的网状结构。</p>
+<h5 id="3-字节码生成技术与动态代理的实现"><a href="#3-字节码生成技术与动态代理的实现" class="headerlink" title="3. 字节码生成技术与动态代理的实现"></a>3. 字节码生成技术与动态代理的实现</h5><p>  字节码生成技术有很多，例如<code>Javassist</code>、<code>CGLib</code>、<code>ASM</code>等等，JDK的<code>javac</code>是字节码生成技术的“老祖宗”，且是第一个由Java程序写成的程序，代码<code>langtools/src/share/classes/com/sun/tools/javac</code>目录中。其他使用字节码生成的技术如Web服务器中的JSP编译器，编译时植入的AOP框架等等。</p>
+<p>动态，是针对使用Java代码实际编写了代理类的“静态”代理而言的，其优势不仅仅是省去了编写代理类，而是实现了可以在原始类和接口未知的时候，确定代理类的代理行为。以下以JDK动态代码说明字节码生成技术：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">DynamicProxyTest</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">interface</span> <span class="title">IHello</span> </span>&#123;</span><br><span class="line">        <span class="function"><span class="keyword">void</span> <span class="title">sayHello</span><span class="params">()</span></span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">Hello</span> <span class="keyword">implements</span> <span class="title">IHello</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">sayHello</span><span class="params">()</span> </span>&#123;</span><br><span class="line">            System.out.println(<span class="string">&quot;hello world&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">DynamicProxy</span> <span class="keyword">implements</span> <span class="title">InvocationHandler</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">private</span> Object object;</span><br><span class="line"></span><br><span class="line">        <span class="function">Object <span class="title">bind</span><span class="params">(Object object)</span> </span>&#123;</span><br><span class="line">            <span class="keyword">this</span>.object = object;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">return</span> Proxy.newProxyInstance(object.getClass().getClassLoader(), object.getClass().getInterfaces(), <span class="keyword">this</span>);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="function"><span class="keyword">public</span> Object <span class="title">invoke</span><span class="params">(Object o, Method method, Object[] objects)</span> <span class="keyword">throws</span> Throwable </span>&#123;</span><br><span class="line">            System.out.println(<span class="string">&quot;welcome&quot;</span>);</span><br><span class="line">            <span class="keyword">return</span> method.invoke(object, objects);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        IHello hello = (IHello) <span class="keyword">new</span> DynamicProxy().bind(<span class="keyword">new</span> Hello());</span><br><span class="line">        hello.sayHello();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上述代码中唯一黑匣子是<code>Proxy.newProxyInstance()</code>方法，其返回一个<code>IHello</code>接口，且代理了<code>new Hello</code>实例行为对象，其内部进行了验证、优化、缓存、同步、生成字节码、显示类加载等操作，其最后调用了<code>sun.misc.ProxyGenerator.generateProxyClass()</code>方法完成生成字节码的动作。main方法中加入<code>System.getProperties().put(&quot;sun.misc.ProxyGenerator.saveGeneratedFiles&quot;, &quot;true&quot;);</code>磁盘中会生成一个<code>$Proxy0.class</code>的代理类Class文件，反编译后代码（省略<code>hashCode</code>、<code>toString</code>、<code>equalsl</code>方法）如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">final</span> <span class="class"><span class="keyword">class</span> $<span class="title">Proxy0</span> <span class="keyword">extends</span> <span class="title">Proxy</span> <span class="keyword">implements</span> <span class="title">IHello</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> Method m1;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> Method m3;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> Method m2;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> Method m0;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> $Proxy0(InvocationHandler var1) <span class="keyword">throws</span>  &#123;</span><br><span class="line">        <span class="keyword">super</span>(var1);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">void</span> <span class="title">sayHello</span><span class="params">()</span> <span class="keyword">throws</span>  </span>&#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="comment">// super.h即父类中的InvocationHandler实例变量</span></span><br><span class="line">            <span class="keyword">super</span>.h.invoke(<span class="keyword">this</span>, m3, (Object[])<span class="keyword">null</span>);</span><br><span class="line">        &#125; <span class="keyword">catch</span> (RuntimeException | Error var2) &#123;</span><br><span class="line">            <span class="keyword">throw</span> var2;</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable var3) &#123;</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> UndeclaredThrowableException(var3);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">static</span> &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            m1 = Class.forName(<span class="string">&quot;java.lang.Object&quot;</span>).getMethod(<span class="string">&quot;equals&quot;</span>, Class.forName(<span class="string">&quot;java.lang.Object&quot;</span>));</span><br><span class="line">            m3 = Class.forName(<span class="string">&quot;com.effiu.essay.jvm.vm.DynamicProxyTest$IHello&quot;</span>).getMethod(<span class="string">&quot;sayHello&quot;</span>);</span><br><span class="line">            m2 = Class.forName(<span class="string">&quot;java.lang.Object&quot;</span>).getMethod(<span class="string">&quot;toString&quot;</span>);</span><br><span class="line">            m0 = Class.forName(<span class="string">&quot;java.lang.Object&quot;</span>).getMethod(<span class="string">&quot;hashCode&quot;</span>);</span><br><span class="line">        &#125; <span class="keyword">catch</span> (NoSuchMethodException var2) &#123;</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> NoSuchMethodError(var2.getMessage());</span><br><span class="line">        &#125; <span class="keyword">catch</span> (ClassNotFoundException var3) &#123;</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> NoClassDefFoundError(var3.getMessage());</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>其内部很简单，为传入<code>IHello</code>接口的每个方法(包括<code>equals</code>、<code>hashCode</code>、<code>toString</code>方法)都生成了对应的实现，并且统一调用了<code>InvocationHandler</code>对象的<code>invoke()</code>方法。</p>
+<h5 id="4-手动实现远程执行功能-page-289"><a href="#4-手动实现远程执行功能-page-289" class="headerlink" title="4. 手动实现远程执行功能(page 289)"></a>4. 手动实现远程执行功能(page 289)</h5><p>利用类加载及虚拟机执行子系统的知识去实现服务端执行临时代码的功能。</p>
+<h6 id="1-目标"><a href="#1-目标" class="headerlink" title="1. 目标"></a>1. 目标</h6><p>要实现“在服务端执行临时代码”的目标有以下要求:</p>
+<ul>
+<li>不依赖JDK，在大部分JDK中都可以使用</li>
+<li>不改变原有服务端程序的部署，不依赖三方类库</li>
+<li>不侵入原有程序，不需要改变原有代码，也不会对原有程序的运行带来任何影响</li>
+<li>“临时代码”支持Java语言</li>
+<li>“临时代码”具备足够的自由度，不需要依赖特定的类或特定的接口(不可以依赖原有服务端没有的类库，可以依赖服务端使用的类库)</li>
+<li>“临时代码”的执行结果能返回到客户端，执行结果也可以包括程序中输出的信息以及抛出的异常信息等。</li>
+</ul>
+<h6 id="2-思路"><a href="#2-思路" class="headerlink" title="2. 思路"></a>2. 思路</h6><p>要实现程序，有以下几个问题：</p>
+<ul>
+<li>如何编译提交的服务器的Java代码？<ul>
+<li>使用三方依赖编译Java文件，会引入额外的依赖</li>
+<li>直接在客户端编译完成，把字节码传到服务端</li>
+</ul>
+</li>
+<li>如何执行编译之后的Java代码？<ul>
+<li>通过类加载器加载这个类生成一个Class对象，然后通过反射调用一下某个方法。然后要考虑类的反复修改、提交、执行。提交的类要支持访问服务器的其他类库，临时代码还支持Java类在执行完后的回收和卸载</li>
+</ul>
+</li>
+<li>如何收集Java代码的执行结果？<ul>
+<li>把程序中的标准输出和错误输出打印的信息收集起来(<code>System.out/err</code>)，但是不能影响服务器端整个虚拟机进程全局共享的资源，所以不能直接用<code>System.setOut()</code>和<code>System.setErr()</code>重定向流到自定义的<code>PrintStream</code>对象上，所以我们要直接在执行的类中把<code>System.out</code>的符号引用替换为我们准备的<code>PrintStream</code>的符号引用</li>
+</ul>
+</li>
+</ul>
+<p>代码见：<a href=''>远程执行</a></p>
+<h5 id="3-总结"><a href="#3-总结" class="headerlink" title="3. 总结"></a>3. 总结</h5><p>Class文件格式、类加载及虚拟机执行引擎都是虚拟机中不可缺少的组成部分。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/JVM/" rel="tag"># JVM</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/07/28/jvm/8_vm_bytecode_execution_engine/" rel="prev" title="虚拟机字节码执行引擎">
+      <i class="fa fa-chevron-left"></i> 虚拟机字节码执行引擎
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/07/mysql/10_transaction_isolation/" rel="next" title="MySQL事务及隔离性">
+      MySQL事务及隔离性 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

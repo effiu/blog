@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="Redis数据全部在内存中，那么当系统宕机，数据就会全部丢失，因此必须有一种机制来保证Redis的数据不会因故障而丢失，这种机制就是Redis的持久化机制。 Redis的管道并不是Redis服务器直接提供的技术，而是由客户端通过改变读写顺序带来的性能的巨大提升。 Redis也具有事务，其非常简单，所以其事务模型不严格。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis持久化、管道和事务">
+<meta property="og:url" content="https://www.effiu.cn/2019/08/25/redis/8_persistence_pipeline_transaction/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="Redis数据全部在内存中，那么当系统宕机，数据就会全部丢失，因此必须有一种机制来保证Redis的数据不会因故障而丢失，这种机制就是Redis的持久化机制。 Redis的管道并不是Redis服务器直接提供的技术，而是由客户端通过改变读写顺序带来的性能的巨大提升。 Redis也具有事务，其非常简单，所以其事务模型不严格。">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/21.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/22.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/23.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/24.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/25.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/19.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/redis/26.png">
+<meta property="article:published_time" content="2019-08-25T13:51:00.000Z">
+<meta property="article:modified_time" content="2019-08-25T13:51:21.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="Redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/redis/21.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2019/08/25/redis/8_persistence_pipeline_transaction/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Redis持久化、管道和事务 | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-Redis%E6%8C%81%E4%B9%85%E5%8C%96"><span class="nav-number">1.</span> <span class="nav-text">1. Redis持久化</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E5%BF%AB%E7%85%A7"><span class="nav-number">1.1.</span> <span class="nav-text">1. 快照</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E5%BF%AB%E7%85%A7%E5%8E%9F%E7%90%86"><span class="nav-number">1.1.1.</span> <span class="nav-text">1. 快照原理</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-fork-%E5%A4%9A%E8%BF%9B%E7%A8%8B"><span class="nav-number">1.1.2.</span> <span class="nav-text">2. fork(多进程)</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-AOF"><span class="nav-number">1.2.</span> <span class="nav-text">2. AOF</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-AOF%E5%8E%9F%E7%90%86"><span class="nav-number">1.2.1.</span> <span class="nav-text">1. AOF原理</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-AOF%E9%87%8D%E5%86%99"><span class="nav-number">1.2.2.</span> <span class="nav-text">2. AOF重写</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-fsync"><span class="nav-number">1.2.3.</span> <span class="nav-text">3. fsync</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#4-%E8%BF%90%E7%BB%B4"><span class="nav-number">1.2.4.</span> <span class="nav-text">4. 运维</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#5-%E6%B7%B7%E5%90%88%E6%8C%81%E4%B9%85%E5%8C%96"><span class="nav-number">1.2.5.</span> <span class="nav-text">5. 混合持久化</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-Redis%E7%AE%A1%E9%81%93"><span class="nav-number">2.</span> <span class="nav-text">2. Redis管道</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-Redis%E7%9A%84%E4%BF%A1%E6%81%AF%E4%BA%A4%E4%BA%92"><span class="nav-number">2.1.</span> <span class="nav-text">1. Redis的信息交互</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E7%AE%A1%E9%81%93%E6%9C%AC%E8%B4%A8"><span class="nav-number">2.2.</span> <span class="nav-text">2. 管道本质</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E4%BA%8B%E5%8A%A1"><span class="nav-number">3.</span> <span class="nav-text">3. 事务</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E4%BA%8B%E5%8A%A1%E7%9A%84%E5%9F%BA%E6%9C%AC%E4%BD%BF%E7%94%A8"><span class="nav-number">3.1.</span> <span class="nav-text">1. 事务的基本使用</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E5%8E%9F%E5%AD%90%E6%80%A7"><span class="nav-number">3.2.</span> <span class="nav-text">2. 原子性</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-discard"><span class="nav-number">3.3.</span> <span class="nav-text">3. discard</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#4-%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F"><span class="nav-number">3.4.</span> <span class="nav-text">4. 使用方式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#5-watch"><span class="nav-number">3.5.</span> <span class="nav-text">5. watch</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/25/redis/8_persistence_pipeline_transaction/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Redis持久化、管道和事务
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-08-25 21:51 21:51:00 / Modified: 21:51:21" itemprop="dateCreated datePublished" datetime="2019-08-25T21:51:00+08:00">2019-08-25 21:51</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/25/redis/8_persistence_pipeline_transaction/" class="post-meta-item leancloud_visitors" data-flag-title="Redis持久化、管道和事务" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2019/08/25/redis/8_persistence_pipeline_transaction/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2019/08/25/redis/8_persistence_pipeline_transaction/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>5 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Redis数据全部在内存中，那么当系统宕机，数据就会全部丢失，因此必须有一种机制来保证Redis的数据不会因故障而丢失，这种机制就是Redis的持久化机制。</p>
+<p>Redis的管道并不是Redis服务器直接提供的技术，而是由客户端通过改变读写顺序带来的性能的巨大提升。</p>
+<p>Redis也具有事务，其非常简单，所以其事务模型不严格。</p>
+<a id="more"></a>
+
+<h3 id="1-Redis持久化"><a href="#1-Redis持久化" class="headerlink" title="1. Redis持久化"></a>1. Redis持久化</h3><p>Redis的持久化机制有两种：</p>
+<ul>
+<li>快照：是一次全量备份，是内存数据的二进制序列化形式，存储上非常紧凑</li>
+<li>AOF日志：是连续的增量备份，AOF日志记录的是内存数据修改的指令记录文本。在长期运行过程中会变得非常大，Redis重启时需要加载AOF日志进行指令重放，这个时间会非常长。所以AOF需要定期重写AOF日志瘦身。</li>
+</ul>
+<h4 id="1-快照"><a href="#1-快照" class="headerlink" title="1. 快照"></a>1. 快照</h4><h5 id="1-快照原理"><a href="#1-快照原理" class="headerlink" title="1. 快照原理"></a>1. 快照原理</h5><p>Redis是单线程程序，这个线程要负责客户端套接字的并发读写和内存数据结构逻辑读写。</p>
+<p>若在处理客户端请求时还要进行内存快照是不现实的，这会严重拖垮服务器请求的性能，因为其是单线程程序，而内存快照要求Redis进行文件IO操作，可很明显文件IO操作不能使用多路复用API。所以<font color='red'>为了不阻塞线上业务，需要边持久化边相应客户端请求</font>。</p>
+<p>但是，在持久化过程中，内存中的数据还在改变，所以Redis使用操作系统的<strong>多进程COW</strong>(Copy On Write)机制来实现快照持久化。</p>
+<h5 id="2-fork-多进程"><a href="#2-fork-多进程" class="headerlink" title="2. fork(多进程)"></a>2. fork(多进程)</h5><p>Redis在持久化时会调用glibc函数<code>fork</code>产生一个子进程，快照持久化完全交给子进程处理，而父进程继续处理客户端请求。当子进程刚刚产生时，其和父进程共享内存中的代码和数据段，这是Linux的机制，为了节约资源，所以在进程刚刚分离时，内存增加几乎没有变化。</p>
+<p>子进程做持久化，其不会修改在现有的数据结构，只是对数据结构进行遍历读取，然后序列化写到磁盘中。而同时父进程还在处理客户端的请求，然后对内存数据结构进行修改，这时就会用到操作系统的COW机制进行数据段页面的分离。数据段是由很多操作系统的页面组成，父进程对一个页面进行修改时，会将被共享的页面复制一份分离出来，然后对这个复制的页面进行修改，同时子进程持久化的页面是没有修改的。</p>
+<p>随着父进程修改操作的持续进行，会有越来越多的页面被分离出来，所以内存是持续增长的。但是基本不会超过原来的2倍大小，因为Redis中冷数据的比例一般比较高，所以基本不会出现所有页面被分离的情况。</p>
+<p>子进程看到的数据，在子进程产生的瞬间就固化了。</p>
+<h4 id="2-AOF"><a href="#2-AOF" class="headerlink" title="2. AOF"></a>2. AOF</h4><h5 id="1-AOF原理"><a href="#1-AOF原理" class="headerlink" title="1. AOF原理"></a>1. AOF原理</h5><p>AOF日志存储的是Redis的顺序执行指令序列，<font color='red'>只记录对内存进行修改的指令记录</font>。</p>
+<p>Redis会在收到客户端修改指令后，进行参数校验和逻辑处理后，就会立即将指令文本存储到AOF日志中，即先执行后存储。</p>
+<h5 id="2-AOF重写"><a href="#2-AOF重写" class="headerlink" title="2. AOF重写"></a>2. AOF重写</h5><p>Redis在长期运行过程中，AOF的日志会越来越长。当系统宕机后，重放整个AOF日志会非常耗时，导致Redis长时间无法对外提供服务。所以需要对AOF日志瘦身。</p>
+<p>Redis提供了<code>bgrewriteaof</code>对AOF日志进行瘦身。其原理就是开辟一个子进程对内存进行遍历转换出一系列Redis操作指令，序列化到新的AOF日志文件中。序列化完成后再将操作期间发生的增量AOF日志追加到新的AOF日志文件中，追加完成后就会替代旧的日志文件，瘦身完成。</p>
+<h5 id="3-fsync"><a href="#3-fsync" class="headerlink" title="3. fsync"></a>3. fsync</h5><p>AOF日志是以文件的形式存在的，当进程对AOF文件进行写操作时，实际上是将内存写到内核为文件描述符分配的内存缓存中，然后内核会异步将数据写到磁盘中。</p>
+<p>这就意味着若发生系统宕机，AOF日志可能会出现未写回到磁盘中的情况，造成日志丢失。Linux的glibc提供了<code>fsync(int fd)</code>函数可以将指定文件内容强制从内核缓存刷新的磁盘。只要Redis服务调用<code>fsync</code>函数就可以保证AOF日志不会丢失，但是<code>fsync</code>函数是磁盘IO操作，很慢，所以不能一个指定调用一个<code>fsync</code>。</p>
+<p>在生产环境中，Redis通常是每1s左右执行一次<code>fsync</code>操作，这是可以配置的。这是在数据安全和性能之间做的一次折中，在保证高性能的同时，尽量避免数据丢失。</p>
+<h5 id="4-运维"><a href="#4-运维" class="headerlink" title="4. 运维"></a>4. 运维</h5><p>快照是通过开启子进程的方式进行的，是一个比较好资源的操作：</p>
+<ul>
+<li>遍历整个内存，频繁写入磁盘会加重系统负载</li>
+<li>AOF的<code>fsync</code>是非常耗时的磁盘IO操作，会降低Redis性能，增加系统负担。</li>
+</ul>
+<p>所以通常Redis主节点是不会进行持久化的，持久化操作在从节点进行。从节点是备份节点，没有来着客户端请求的压力。</p>
+<p>一般考虑到网络问题，从节点可能连不上主节点，就会出现数据不一致的情况，所以在生产环境要做好监控，保证网络通畅或者能快速修复。另外可以多增加一个从节点增加容错率。</p>
+<h5 id="5-混合持久化"><a href="#5-混合持久化" class="headerlink" title="5. 混合持久化"></a>5. 混合持久化</h5><p>当我们重启Redis时，使用快照的方式恢复内存状态，会造成数据大量丢失，而使用AOF日志重放通畅会非常耗时。</p>
+<p>Redis混合持久化。将rdb文件的内容和增量AOF日志文件存放在一起。AOF不再是全量日志，而是自持久化开始到持久化结束这段时间发生的增量AOF日志，通常会很小。</p>
+<p><img src="https://images.effiu.cn/blog/redis/21.png" alt="混合持久化"></p>
+<p>在Redis重启时会先加载RDB文件，然后重放AOF日志，效率会得到大幅提升。</p>
+<h3 id="2-Redis管道"><a href="#2-Redis管道" class="headerlink" title="2. Redis管道"></a>2. Redis管道</h3><h4 id="1-Redis的信息交互"><a href="#1-Redis的信息交互" class="headerlink" title="1. Redis的信息交互"></a>1. Redis的信息交互</h4><p>当我们使用Redis客户端对Redis做操作时，客户端将请求发送给服务器，服务器处理完成后，再将请求返回给客户端，花费一个网络数据包的时间。</p>
+<p><img src="https://images.effiu.cn/blog/redis/22.png" alt="Redis客户端请求过程"></p>
+<p>若有连续多个指令，那就会花费多个网络数据包。</p>
+<p><img src="https://images.effiu.cn/blog/redis/23.png" alt="Redis客户端请求过程"></p>
+<p>在这多个数据包发送过程中，客户端经历了写-读-写-读的过程。</p>
+<p><img src="https://images.effiu.cn/blog/redis/24.png" alt="Redis客户端请求过程"></p>
+<p>若我们可以调整写的顺序，改为写-写-读-读，就会只花费一个网络来回，就类似于将<code>write</code>和<code>read</code>操作合并了。</p>
+<p><img src="https://images.effiu.cn/blog/redis/25.png" alt="Redis客户端请求过程"></p>
+<p>这便是管道操作的本质，服务端没有做任何处理，而是客户端通过对管道中的指令列表改变读写顺序而大幅节省IO时间。管道中的指令越多，效果越好。</p>
+<h4 id="2-管道本质"><a href="#2-管道本质" class="headerlink" title="2. 管道本质"></a>2. 管道本质</h4><p>一个Redis请求的交互过程，非常复杂。要经过网络协议栈，需要深入内核。</p>
+<p><img src="https://images.effiu.cn/blog/redis/19.png" alt="请求过程"></p>
+<p>上图是一个完整的请求过程。具体如下：</p>
+<ol>
+<li>客户端调用<code>write</code>将消息写入到操作系统内核为套接字分配的发送缓冲<code>send buffer</code>中</li>
+<li>客户端操作系统内核将发送缓冲的内容发送到网卡，网卡硬件将数据通过网际(网际网络是指在广域网与广域网之间互相连接的网络)路由发送到服务端的网卡</li>
+<li>服务器操作系统内核将网卡收到的数据放到内核为套接字分配的接收缓冲<code>recv buffer</code></li>
+<li>服务器进程调用<code>read</code>从接收缓冲中取出消息进行处理</li>
+<li>服务器进程调用<code>write</code>将响应消息写入到内核为套接字分配的发送缓冲<code>send buffer</code>中</li>
+<li>服务器操作系统内核将发送缓冲中的内容发送到网卡，网卡硬件将数据通过网际路由发送到客户端的网卡</li>
+<li>客户端操作系统内核将网卡收到的数据放到内核为套接字分配的接收缓冲<code>recv buffer</code></li>
+<li>服务器进程调用<code>write</code>从接收缓冲区中取出消息返回给上层业务逻辑进行处理</li>
+</ol>
+<p>其中1<del>4和5</del>8其实是一样的，只不过一个是请求过程，一个是响应过程</p>
+<p><code>write</code>操作并不是等到接收到消息才返回的，其只负责将数据写到操作系统为内核分配的缓冲区就会返回，剩下的事交给操作系统内核异步将数据发送到目标机器，若发送缓冲慢了，那么就需要等待缓冲区空出来了，这是写IO操作的真正耗时。</p>
+<p><code>read</code>操作只负责将数据从本地操作系统内核缓冲区中取出数据。但若缓冲区为空，那么就需要等待数据到来，这是读IO操作的真正耗时。</p>
+<p>例如：<code>value=redis.get(key)</code>一个简单的请求。<code>write</code>操作几乎没有耗时，直接写到发送缓冲区，而<code>read</code>就会比较耗时，因为其要等待消息经过网络路由到目标机器处理后的响应消息，再发送回到当前内核读缓冲才可以返回，这才是一个网络请求真正开销。</p>
+<p>对于管道来说，连续的<code>write</code>操作几乎没有耗时，之后第一个<code>read</code>操作会等待一个网络开销，然后所有的消息就回到内核缓冲中了，后续的<code>read</code>操作就可以直接从缓冲中拿到结果。</p>
+<h3 id="3-事务"><a href="#3-事务" class="headerlink" title="3. 事务"></a>3. 事务</h3><h4 id="1-事务的基本使用"><a href="#1-事务的基本使用" class="headerlink" title="1. 事务的基本使用"></a>1. 事务的基本使用</h4><p>Redis的事务与数据库类似，分别是</p>
+<ul>
+<li><code>multi</code>，事务的开始</li>
+<li><code>exec</code>，事务的执行</li>
+<li><code>discard</code>，事务的丢弃</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"><span class="comment">### a的初始化为1</span></span></span><br><span class="line">27.0.0.1:6379&gt; multi</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; incr a</span><br><span class="line">QUEUED					   ## QUEUED是简单字符串，表示指令已经被服务器缓存到队列里了</span><br><span class="line">127.0.0.1:6379&gt; exec		## exec之前，其他客户端执行&quot;get a&quot;操作返回值为1</span><br><span class="line">1) (integer) 2</span><br><span class="line">127.0.0.1:6379&gt; get a</span><br><span class="line">&quot;2&quot;</span><br></pre></td></tr></table></figure>
+
+<p>开启事务后，所有的指令都会缓存在服务器的一个事务队列中，服务器收到<code>exec</code>指令后，才开始执行整个事务队列，执行完毕后一次性返回所有执行结果。Redis是单线程程序，所以其执行过程中不会被其他指令打断，<strong>具有原子性</strong>。</p>
+<p><img src="https://images.effiu.cn/blog/redis/26.png" alt="Redis的事务"></p>
+<h4 id="2-原子性"><a href="#2-原子性" class="headerlink" title="2. 原子性"></a>2. 原子性</h4><p>Redis事务的原子性也比较特殊。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; set a 1</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; set b a</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; multi</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; incr a</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; incr b</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; set c d</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; exec</span><br><span class="line">1) (integer) 2</span><br><span class="line">2) (error) ERR value is not an integer or out of range</span><br><span class="line">3) OK</span><br></pre></td></tr></table></figure>
+
+<p>执行<code>exec</code>后，第二个指令执行失败了，但是第三个确成功了。事务在执行过程中遇到失败，后面的指令还会继续执行。所以<font color='red'>Redis的事务的“原子性”，仅仅是有不能被其他事务打断的特性</font>。</p>
+<h4 id="3-discard"><a href="#3-discard" class="headerlink" title="3. discard"></a>3. discard</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; get a</span><br><span class="line">&quot;2&quot;</span><br><span class="line">127.0.0.1:6379&gt; multi</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; incr a</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; discard</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; get a</span><br><span class="line">&quot;2&quot;</span><br></pre></td></tr></table></figure>
+
+<p><code>discard</code>后，<code>incr a</code>指令并没有被执行。</p>
+<h4 id="4-使用方式"><a href="#4-使用方式" class="headerlink" title="4. 使用方式"></a>4. 使用方式</h4><p>Redis事务在每发送每个指令到事务缓存队列时都要经过一次网络读写，当一个事务内部指令较多时，需要网络IO时间也会很长。所以Redis事务要结合<strong>pipeline</strong>(管道)一起使用，这样可以将多次IO操作压缩为一个IO操作。例如：springboot提供的redis starter中也支持pipeline，如下是开启了<strong>事务+pipeline</strong>：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">List&lt;Object&gt; results = redisTemplate.executePipelined(<span class="keyword">new</span> SessionCallback&lt;String&gt;() &#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="keyword">public</span> &lt;K, V&gt; <span class="function">String <span class="title">execute</span><span class="params">(RedisOperations&lt;K, V&gt; operations)</span> <span class="keyword">throws</span> DataAccessException </span>&#123;</span><br><span class="line">                ValueOperations&lt;String, String&gt; valueOperations = redisTemplate.opsForValue();</span><br><span class="line">                valueOperations.increment(<span class="string">&quot;a&quot;</span>, <span class="number">1</span>);</span><br><span class="line">                valueOperations.get(<span class="string">&quot;a&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> <span class="string">&quot;&quot;</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br></pre></td></tr></table></figure>
+
+<h4 id="5-watch"><a href="#5-watch" class="headerlink" title="5. watch"></a>5. watch</h4><p>Redis提供了watch机制，其是一种乐观锁，用于解决并发问题。</p>
+<p>假如有一种业务场景：Redis存储了账户余额，其是一个整数。现在有两个并发的客户端要对账户余额进行修改操作，且修改不是简单的incrby指令，而是要对余额*倍数，Redis没有提供<code>multiplyby</code>这样的指令，所以我们只能先取出余额，再将结果写回Redis。这就会产生并发问题，多个客户端进行并发操作。</p>
+<p>我们可以通过使用Redis分布式锁避免冲突，但分布式锁是一种悲观锁。</p>
+<p><code>watch</code>会在事务开始之前关注一个或者多个变量，当服务器执行<code>exec</code>指令执行缓存的事务队列时，Redis会检查关键变量自<code>watch</code>之后，是否被修改过(包括当前事务所在的客户端)。若有改动，<code>exec</code>指令就会返回null告知客户端执行失败，客户端一般会选择重试。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">127.0.0.1:6379&gt; watch a		## 开启watch，监听变量a</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; incr a		## a被改动</span><br><span class="line">(integer) 11</span><br><span class="line">127.0.0.1:6379&gt; multi		## 开启事务</span><br><span class="line">OK</span><br><span class="line">127.0.0.1:6379&gt; incr a</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; get a</span><br><span class="line">QUEUED</span><br><span class="line">127.0.0.1:6379&gt; exec		## 执行事务，执行失败</span><br><span class="line">(nil)</span><br><span class="line">127.0.0.1:6379&gt; get a</span><br><span class="line">&quot;11&quot;</span><br></pre></td></tr></table></figure>
+
+<p>Redis禁止在<code>multi</code>和<code>exec</code>之间执行<code>watch</code>指令，必须在<code>multi</code>之前<code>watch</code>变量。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/Redis/" rel="tag"># Redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/25/redis/7_redis_principle/" rel="prev" title="Redis原理之IO模型与通信协议">
+      <i class="fa fa-chevron-left"></i> Redis原理之IO模型与通信协议
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2019/08/26/redis/9_pubsub_object_compression_master_slav_sync/" rel="next" title="Redis PubSub、小对象压缩和主从同步">
+      Redis PubSub、小对象压缩和主从同步 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>

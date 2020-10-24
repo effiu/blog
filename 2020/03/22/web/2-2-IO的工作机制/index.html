@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.1.1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+  
+  <link rel="stylesheet" href="/blog/lib/animate-css/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.effiu.cn","root":"/blog/","scheme":"Muse","version":"8.0.0-rc.4","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"manual","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="数据从一台主机到另一台主机要经过很多步骤  确认相互沟通(TCP握手) 沟通的渠道(物理链路) 沟通的语言(通信协议)">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java I&#x2F;O的工作机制(2)">
+<meta property="og:url" content="https://www.effiu.cn/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/index.html">
+<meta property="og:site_name" content="effiu&#39;s blog">
+<meta property="og:description" content="数据从一台主机到另一台主机要经过很多步骤  确认相互沟通(TCP握手) 沟通的渠道(物理链路) 沟通的语言(通信协议)">
+<meta property="og:locale">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/13.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/14.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/15.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/16.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/17.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/18.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/19.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/21.png">
+<meta property="og:image" content="https://images.effiu.cn/blog/web/20.png">
+<meta property="article:published_time" content="2020-03-22T11:56:00.000Z">
+<meta property="article:modified_time" content="2020-03-29T08:08:33.000Z">
+<meta property="article:author" content="effiu">
+<meta property="article:tag" content="java web">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://images.effiu.cn/blog/web/13.png">
+
+<link rel="canonical" href="https://www.effiu.cn/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh'
+  };
+</script>
+
+  <title>Java I/O的工作机制(2) | effiu's blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <main class="main">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+        <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+        <span class="toggle-line toggle-line-first"></span>
+        <span class="toggle-line toggle-line-middle"></span>
+        <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">effiu's blog</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">生活不止眼前的苟且，还有诗和远方的田野</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/blog/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/blog/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/blog/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/blog/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>Schedule</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="Searching..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E7%BD%91%E7%BB%9CI-O%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">1.</span> <span class="nav-text">1. 网络I&#x2F;O工作机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-TCP%E7%8A%B6%E6%80%81%E8%BD%AC%E5%8C%96"><span class="nav-number">1.1.</span> <span class="nav-text">1. TCP状态转化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%BD%B1%E5%93%8D%E7%BD%91%E7%BB%9C%E4%BC%A0%E8%BE%93%E7%9A%84%E5%9B%A0%E7%B4%A0"><span class="nav-number">1.2.</span> <span class="nav-text">2. 影响网络传输的因素</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-Java-Socket%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">1.3.</span> <span class="nav-text">3. Java Socket的工作机制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-%E5%BB%BA%E7%AB%8B%E9%80%9A%E4%BF%A1%E9%93%BE%E8%B7%AF"><span class="nav-number">1.4.</span> <span class="nav-text">4. 建立通信链路</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-%E6%95%B0%E6%8D%AE%E4%BC%A0%E8%BE%93"><span class="nav-number">1.5.</span> <span class="nav-text">5. 数据传输</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-NIO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F"><span class="nav-number">2.</span> <span class="nav-text">2. NIO的工作方式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-BIO%E7%9A%84%E9%97%AE%E9%A2%98"><span class="nav-number">2.1.</span> <span class="nav-text">1. BIO的问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-NIO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6"><span class="nav-number">2.2.</span> <span class="nav-text">2. NIO的工作机制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-Buffer%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F"><span class="nav-number">2.3.</span> <span class="nav-text">3. Buffer的工作方式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-NIO%E7%9A%84%E6%95%B0%E6%8D%AE%E8%AE%BF%E9%97%AE%E6%96%B9%E5%BC%8F"><span class="nav-number">2.4.</span> <span class="nav-text">4. NIO的数据访问方式</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-FileChannel-transferXXX"><span class="nav-number">2.4.1.</span> <span class="nav-text">1. FileChannel.transferXXX</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-FileChannel-map"><span class="nav-number">2.4.2.</span> <span class="nav-text">2. FileChannel.map</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-I-O%E8%B0%83%E4%BC%98"><span class="nav-number">3.</span> <span class="nav-text">3. I&#x2F;O调优</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E7%A3%81%E7%9B%98I-O%E4%BC%98%E5%8C%96"><span class="nav-number">3.1.</span> <span class="nav-text">1. 磁盘I&#x2F;O优化</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E6%80%A7%E8%83%BD%E6%A3%80%E6%B5%8B"><span class="nav-number">3.1.1.</span> <span class="nav-text">1. 性能检测</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E6%8F%90%E5%8D%87I-O%E6%80%A7%E8%83%BD"><span class="nav-number">3.1.2.</span> <span class="nav-text">2. 提升I&#x2F;O性能</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-TCP%E7%BD%91%E7%BB%9C%E5%8F%82%E6%95%B0%E8%B0%83%E4%BC%98"><span class="nav-number">3.2.</span> <span class="nav-text">2. TCP网络参数调优</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E7%BD%91%E7%BB%9CI-O%E4%BC%98%E5%8C%96"><span class="nav-number">3.3.</span> <span class="nav-text">3. 网络I&#x2F;O优化</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-%E5%90%8C%E6%AD%A5%E4%B8%8E%E5%BC%82%E6%AD%A5"><span class="nav-number">3.3.1.</span> <span class="nav-text">1. 同步与异步</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-%E9%98%BB%E5%A1%9E%E4%B8%8E%E9%9D%9E%E9%98%BB%E5%A1%9E"><span class="nav-number">3.3.2.</span> <span class="nav-text">2. 阻塞与非阻塞</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#3-%E4%B8%A4%E7%A7%8D%E6%96%B9%E5%BC%8F%E7%9A%84%E7%BB%84%E5%90%88"><span class="nav-number">3.3.3.</span> <span class="nav-text">3.两种方式的组合</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-IO%E4%B8%AD%E7%9A%84%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F"><span class="nav-number">4.</span> <span class="nav-text">4. IO中的设计模式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E9%80%82%E9%85%8D%E5%99%A8%E6%A8%A1%E5%BC%8F"><span class="nav-number">4.1.</span> <span class="nav-text">1. 适配器模式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E8%A3%85%E9%A5%B0%E5%99%A8%E6%A8%A1%E5%BC%8F"><span class="nav-number">4.2.</span> <span class="nav-text">2. 装饰器模式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E9%80%82%E9%85%8D%E5%99%A8%E4%B8%8E%E8%A3%85%E9%A5%B0%E5%99%A8%E5%8C%BA%E5%88%AB"><span class="nav-number">4.3.</span> <span class="nav-text">3. 适配器与装饰器区别</span></a></li></ol></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="effiu"
+      src="/blog/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">effiu</p>
+  <div class="site-description" itemprop="description">effiu的博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/blog/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/blog/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </header>
+
+      
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div id="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+      <div class="main-inner">
+        
+
+        <div class="content post posts-expand">
+          
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java I/O的工作机制(2)
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2020-03-22 19:56 19:56:00" itemprop="dateCreated datePublished" datetime="2020-03-22T19:56:00+08:00">2020-03-22 19:56</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2020-03-29 16:08 16:08:33" itemprop="dateModified" datetime="2020-03-29T16:08:33+08:00">2020-03-29 16:08</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/" class="post-meta-item leancloud_visitors" data-flag-title="Java I/O的工作机制(2)" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  <span class="post-meta-item">
+    
+      <span class="post-meta-item-icon">
+        <i class="far fa-comment"></i>
+      </span>
+      <span class="post-meta-item-text">Valine: </span>
+    
+    <a title="valine" href="/blog/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/blog/2020/03/22/web/2-2-IO%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%9C%BA%E5%88%B6/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>数据从一台主机到另一台主机要经过很多步骤</p>
+<ul>
+<li>确认相互沟通(TCP握手)</li>
+<li>沟通的渠道(物理链路)</li>
+<li>沟通的语言(通信协议)</li>
+</ul>
+<a id="more"></a>
+
+<h2 id="1-网络I-O工作机制"><a href="#1-网络I-O工作机制" class="headerlink" title="1. 网络I/O工作机制"></a>1. 网络I/O工作机制</h2><h3 id="1-TCP状态转化"><a href="#1-TCP状态转化" class="headerlink" title="1. TCP状态转化"></a>1. TCP状态转化</h3><p><img src="https://images.effiu.cn/blog/web/13.png" alt="png"></p>
+<ol>
+<li>CLOSE: 起始点，在超时或者链接关闭时进入此状态</li>
+<li>LISTEN: Server端在等待连接时的状态，Server端要调用Socket、bind、listen函数，才能进入该状态，这是应用程序被动打开(等待客户端来连接)</li>
+<li>SYN-SENT: 客户端发起连接，发生SYN给服务器端。若服务器不能连接则直接进入CLOSE状态</li>
+<li>SYN-RCVD: 与3对应，服务器端接受客户端的SYN请求，服务器端由LISTEN状态进入SYN-RCVN。同时服务器端回应给客户端一个ACK，发送一个SYN给客户端；若客户端在发起SYN的同时接受到服务器端的SYN请求，客户端会由SYN-SENT转换到SYN-RCVD状态</li>
+<li>ESTABLISHED: 服务器端和客户端在完成3次握手后进入该状态，说明已经可以开始传输数据了</li>
+<li>FIN-WAIT-1: 主动关闭的一方，由状态5进入。具体动作是发送FIN给对方</li>
+<li>FIN-WAIT-2: 主动关闭的一方，接收到对方的FIN ACK，进入此状态。此后不能再接收对方的数据，但是可以向对方发送数据</li>
+<li>CLOSE-WAIT: 接收到FIN后，被动关闭的一方进入此状态。具体动作是在接收到FIN的同时发送ACK</li>
+<li>LAST-ACK: 被动关闭的一方，发起关闭请求，由状态8进入此状态。具体是发送FIN给对方</li>
+<li>CLOSING: 两边同时发起关闭请求时，会由FIN-WAIT-1进入此状态(未收到被动关闭方的FIN ACK)。具体动作是接收到FIN请求，同时响应一个ACK</li>
+<li>TIME-WAIT: 有3个状态可以转化为此状态<ul>
+<li>由FIN-WAIT-2转换到TIME-WAIT，具体是:在双方不同时发起FIN的情况下，主动关闭的一方在完成自身发起的关闭请求后，接收到被动关闭一方的FIN后进入的状态(FIN ACK先于对方的FIN)<font color='red'>FIN-WAIT-2 -&gt; TIME-WAIT</font></li>
+<li>由CLOSING转换到TIME-WAIT，具体是:在双方同时发起关闭，都做了发起FIN的请求，同时接收到了FIN并做了ACK的情况下，就由CLOSING状态进入到TIME-WAIT状态(FIN ACK比对方的FIN晚到)，<font color='red'>FIN-WAIT-1 -&gt; CLOSING -&gt; TIME-WAIT</font></li>
+<li>由FIN-WAIT-1转换到TIME-WAIT，具体是: 同时接收到FIN(对方发起)和ACK(本身发起的FIN ACK)，其与CLOSING转换到TIME-WAIT的区别在于本身发起的FIN回应的ACK先于对方的FIN请求到达，而由CLOSING转换到TIME-WAIT则是对方的FIN先到达(FIN ACK)，<font color='red'>FIN-WAIT-1 -&gt; TIME-WAIT</font></li>
+</ul>
+</li>
+</ol>
+<p>TCP连接的几种状态对调试网络程序非常有帮助。例如，当压测时CPU、网卡、带宽都不是瓶颈，但是性能上不去，那么就有可能是网络连接的问题。就需要查看当前网络连接的状态。</p>
+<h3 id="2-影响网络传输的因素"><a href="#2-影响网络传输的因素" class="headerlink" title="2. 影响网络传输的因素"></a>2. 影响网络传输的因素</h3><p>将一份数据从一个地方传输到另一个地方需要的时间称为响应时间。影响响应时间的因素有很多：</p>
+<ul>
+<li>网络带宽: 所谓带宽就是一条物理链路在1s内能够传输的最大比特数(b/s)。</li>
+<li>传输距离: 也就是数据在光纤中要求的距离，数据在光纤中移动存在折射率，所以其速度大概是光的$2/3$，这个时间就是传输延时</li>
+<li>TCP拥塞控制: TCP传输是一个“停-等-停-等”的协议，传输方和接收方的步调要一致，要达到步调一致就要通过拥塞控制来调节。TCP在传输时会设定一个“窗口(BDP, Bandwidht Delay Product)”，这个窗口的大小是由带宽和RTT(Round-Trip Time，数据在两端的时间，即响应时间)决定的，计算公式是带宽(b/s) X RTT(s)。通过这个值可以得出理论上最优的TCP缓冲区大小。现在Liunx系统可以自动调整发送端和接收端缓冲区的大小</li>
+</ul>
+<h3 id="3-Java-Socket的工作机制"><a href="#3-Java-Socket的工作机制" class="headerlink" title="3. Java Socket的工作机制"></a>3. Java Socket的工作机制</h3><p>Socket描述的是计算机之间完成互相通信的一种抽象功能。大部分情况下使用的都是基于TCP/IP的流套接字，是一种稳定的通信协议。</p>
+<p><img src="https://images.effiu.cn/blog/web/14.png" alt="png"></p>
+<p>两台主机之间的通信必须经过Socket建立连接，而建立Socket连接必须由底层TCP/IP来建立TCP连接。建立TCP连接需要底层IP来寻址网络中的主机。网络层使用IP帮助我们找到目标主机，而TCP/UDP的地址也就是端口号则帮助我们找到目标主机内的应用程序。这样通过Socket实例唯一代表一个主机上的应用程序的通信链路。</p>
+<h3 id="4-建立通信链路"><a href="#4-建立通信链路" class="headerlink" title="4. 建立通信链路"></a>4. 建立通信链路</h3><p>客户端要与服务端通信时，客户端首先要创建一个Socket实例，操作系统为这个Socket实例分配一个没有被使用的端口号，并创建一个包含本地地址、远程地址和端口号的套接字数据结构，这个数据结构将一直保存在系统中直到这个连接关闭。创建Socket实例的构造函数正确返回之前，将要进行TCP的3次握手，3次握手完成后，Socket实例对象将完成创建。</p>
+<p>与之对应的服务器端将创建一个SocketServer实例，只要指定的端口没有被占用，一般实例都会成功，同时操作系统也会为ServerSocket实例创建一个底层数据结构，在这个数据结构中包含指定监听的端口号和包含监听地址的通配符(默认为”*”，即监听所有地址),之后调用<code>accept()</code>方法，将会进入阻塞状态等待客户端的请求。若新的请求到达则会为这个连接创建一个新的套接字数据结构，该套接字的信息包含的地址和端口信息正是请求源地址和端口。这个新创建的数据结构将会关联到ServerSocket实例的一个未完成的连接数据结构列表中，此时这个服务端的与之对应的Socket实例并没有完成创建，而要等到与客户端的3次握手后服务端的Socket实例才会返回，并将这个Socket实例对应的数据结构从未完成列表中移到已完成列表中。ServerSocket所关联的列表中每个数据结构都代表一个客户端建立的TCP连接</p>
+<h3 id="5-数据传输"><a href="#5-数据传输" class="headerlink" title="5. 数据传输"></a>5. 数据传输</h3><p>传输数据是我们建立连接的目的。Socket传输数据的过程如下：</p>
+<p>当连接已经建立成功时，服务端和客户端都会拥有一个Socket实例，每个Socket实例都有一个<code>InputStream</code>和<code>OutputStream</code>，并通过这两个对象来交换数据。网络I/O都是以字节流传输的，当创建Socket对象时，操作系统将会为<code>InputStream</code>和<code>OutputStrea</code>分别分配一定大小的缓存区，数据的写入和读取都是通过这个缓存区完成的。写入端将数据写到<code>OutputStream</code>对应的SendQ队列，当队列满时，数据将会被转移到另一端<code>InputStream</code>的RecvQ队列中，若RecvQ队列已满，那么<code>OutputStream</code>的<code>write</code>方法将会阻塞，知道RecvQ有足够的空间容纳SendQ发送的数据。操作系统分配的缓存区的大小及写入端的速度和读取端的速度非常影响这个连接的数据传输效率。由于可能会发生阻塞，所以网络I/O与磁盘I/O不同的是数据的写入和读取还有一个协调的过程，若两边同时传送数据可能会发生死锁，后面的NIO将会介绍如何避免这种情况。</p>
+<h2 id="2-NIO的工作方式"><a href="#2-NIO的工作方式" class="headerlink" title="2. NIO的工作方式"></a>2. NIO的工作方式</h2><h3 id="1-BIO的问题"><a href="#1-BIO的问题" class="headerlink" title="1. BIO的问题"></a>1. BIO的问题</h3><p>BIO即阻塞I/O，不管是磁盘I/O还是网络I/O，数据在写入<code>OutputStream</code>或者<code>InputStream</code>读取时都有可能会阻塞，若发生阻塞，线程将会失去CPU的使用权，这在大规模访问量和有性能要求的情况下是不能被接受的。尽管当前网络I/O又一些解决办法，例如：一个客户端对应一个线程，若出现问题只是一个线程阻塞而不会影响其他线程，还有为了减少系统线程的开销，采用线程池的办法减少线程创建和销毁的成本，但是大部分场景是无法解决问题的。例如需要HTTP长连接的情况，服务端需要同时保持大量HTTP长链接，但是这些连接并没有一直在传输数据，所以不可能同时创建这么多线程来保持连接。</p>
+<h3 id="2-NIO的工作机制"><a href="#2-NIO的工作机制" class="headerlink" title="2. NIO的工作机制"></a>2. NIO的工作机制</h3><p><img src="https://images.effiu.cn/blog/web/15.png" alt="png"></p>
+<p>上图中，<code>Channel</code>和<code>Selector</code>是NIO中的两个核心概念，<code>Selector</code>可以轮询每个<code>Channel</code>的状态，判断是否有事件到达，达到一个线程处理多个事件的效果。<code>Buffer</code>则是一个更加具体的概念(<a href="https://www.effiu.cn/blog/2019/09/22/java/java_io#2-NIO">见nio</a>)。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// server</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">selector</span><span class="params">()</span> <span class="keyword">throws</span> IOException </span>&#123;</span><br><span class="line">    ByteBuffer buffer = ByteBuffer.allocate(<span class="number">1024</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 创建选择器,调用Selector的静态工厂</span></span><br><span class="line">    Selector selector = Selector.open();</span><br><span class="line">    <span class="comment">// 创建SocketChannel,网络IO通道</span></span><br><span class="line">    ServerSocketChannel channel = ServerSocketChannel.open();</span><br><span class="line">    <span class="comment">// 设置非阻塞</span></span><br><span class="line">    channel.configureBlocking(<span class="keyword">false</span>);</span><br><span class="line">    <span class="comment">// 设置端口号,最大连接数为10</span></span><br><span class="line">    channel.socket().bind(<span class="keyword">new</span> InetSocketAddress( <span class="number">8080</span>), <span class="number">10</span>);</span><br><span class="line">    <span class="comment">// 注册监听事件</span></span><br><span class="line">    channel.register(selector, SelectionKey.OP_ACCEPT);</span><br><span class="line">    <span class="comment">// 轮询Channel</span></span><br><span class="line">    <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">        <span class="comment">// 选择一组其相应通道准备好进行I/O操作的key, 该方法执行一个阻塞的selection操作,</span></span><br><span class="line">        <span class="comment">// 其至少有一个channel被返回时才会返回</span></span><br><span class="line">        <span class="comment">// 调用Selector的wakeup方法或者当前线程被interrupted</span></span><br><span class="line">        selector.select();</span><br><span class="line">        <span class="comment">// 注册到selector上的所有通道,selectedKeys()方法检查注册到selector上的channel是否有需要的事件发生</span></span><br><span class="line">        <span class="comment">// selectionKey可以得到通信通道对象,从而得到通道内的数据,这里读取的数据是Buffer(缓冲区)</span></span><br><span class="line">        Set&lt;SelectionKey&gt; selectionKeys = selector.selectedKeys();</span><br><span class="line">        Iterator&lt;SelectionKey&gt; it = selectionKeys.iterator();</span><br><span class="line">        <span class="keyword">while</span> (it.hasNext()) &#123;</span><br><span class="line">            SelectionKey next = it.next();</span><br><span class="line">            <span class="keyword">if</span> (next.isAcceptable()) &#123;</span><br><span class="line">                System.out.println(<span class="string">&quot;accept&quot;</span>);</span><br><span class="line">                ServerSocketChannel ssChannel = (ServerSocketChannel) next.channel();</span><br><span class="line">                <span class="comment">// 接收到的请求</span></span><br><span class="line">                SocketChannel accept = ssChannel.accept();</span><br><span class="line">                accept.configureBlocking(<span class="keyword">false</span>);</span><br><span class="line">                accept.register(selector, SelectionKey.OP_READ);</span><br><span class="line">                it.remove();</span><br><span class="line">            &#125; <span class="keyword">else</span> <span class="keyword">if</span> (next.isReadable()) &#123;</span><br><span class="line">                System.out.println(<span class="string">&quot;read&quot;</span>);</span><br><span class="line">                SocketChannel sc = (SocketChannel) next.channel();</span><br><span class="line">                <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">                    <span class="keyword">int</span> read = sc.read(buffer);</span><br><span class="line">                    <span class="keyword">if</span> (read &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">                        <span class="keyword">break</span>;</span><br><span class="line">                    &#125;</span><br><span class="line">                    buffer.flip();</span><br><span class="line">                    System.out.println(<span class="keyword">new</span> String(buffer.array()));</span><br><span class="line">                &#125;</span><br><span class="line">                sc.write(ByteBuffer.wrap(<span class="string">&quot;success&quot;</span>.getBytes()));</span><br><span class="line">                sc.close();</span><br><span class="line">                it.remove();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 执行结果如下:</span></span><br><span class="line">accept</span><br><span class="line">read</span><br><span class="line"><span class="number">123</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// client</span></span><br><span class="line"><span class="keyword">final</span> String host = <span class="string">&quot;127.0.0.1&quot;</span>;</span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    SocketChannel channel = SocketChannel.open(<span class="keyword">new</span> InetSocketAddress(host, <span class="number">8080</span>));</span><br><span class="line">    <span class="comment">// 客户端设置为阻塞，否则可能没有返回结果</span></span><br><span class="line">    channel.configureBlocking(<span class="keyword">true</span>);</span><br><span class="line">    System.out.println(<span class="string">&quot;connect: &quot;</span> + channel.isConnected());</span><br><span class="line">    channel.write(ByteBuffer.wrap(<span class="string">&quot;123&quot;</span>.getBytes(<span class="string">&quot;UTF-8&quot;</span>)));</span><br><span class="line">    buffer.clear();</span><br><span class="line">    channel.read(buffer);</span><br><span class="line">    System.out.println(<span class="keyword">new</span> String(buffer.array()));</span><br><span class="line">    channel.close();</span><br><span class="line">&#125; <span class="keyword">catch</span> (IOException e) &#123;</span><br><span class="line">    e.printStackTrace();</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 执行结果如下:</span></span><br><span class="line">connect: <span class="keyword">true</span></span><br><span class="line">success</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-Buffer的工作方式"><a href="#3-Buffer的工作方式" class="headerlink" title="3. Buffer的工作方式"></a>3. Buffer的工作方式</h3><p>上述例子中，当<code>SockectChannelServer</code>接收到的事件后，将数据读取或写入<code>Buffer</code>缓冲区。我们可以把Buffer简单理解为一组基本数据类型的元素列表，通过几个变量保存这个数据的当前位置状态(4个索引)。</p>
+<table>
+<thead>
+<tr>
+<th>索引</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>capacity</td>
+<td>缓冲区数组的总长度</td>
+</tr>
+<tr>
+<td>position</td>
+<td>下一个要操作的数据元素的位置</td>
+</tr>
+<tr>
+<td>limit</td>
+<td>缓冲区数组中不可操作的下一个元素的位置, limit &lt;= capacity</td>
+</tr>
+<tr>
+<td>mark</td>
+<td>用于记录当前position的前一个位置，默认是0</td>
+</tr>
+</tbody></table>
+<p>具体见:<a href="https://www.effiu.cn/blog/2019/09/22/java/java_io/#5-缓冲器的细节" target='_blank'>Buffer缓冲器细节</a></p>
+<p>通过Channel获取的IO数据首先要经过操作系统的Socket缓冲区，在将数据复制到Buffer，这个操作系统的缓存区就是底层TCP所关联的RecvQ或SendQ队列，从操作系统缓冲区到用户缓冲区复制数据比较耗性能，Buffer提供了另外一种直接操作操作系统缓冲区的方式，即<code>ByteBuffer.allocateDirect(size)</code>，其返回<code>DirectByteBuffer</code>就是与底层存储空间关联的缓冲区，通过Native代码操作非JVM堆的内存空间。每次创建或者释放的时候都调用一次<code>System.gc</code>。<code>DirectByteBuffer</code>可能会导致JVM内存泄漏。</p>
+<p><code>DirectByteBuffer</code>和<code>HeapByteBuffer</code>对比如下:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>HeapByteBuffer</th>
+<th>DirectByteBuffer</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>存储位置</td>
+<td>Java堆中</td>
+<td>Native内存中</td>
+</tr>
+<tr>
+<td>I/O</td>
+<td>需要在用户地址空间和操作系统内核地址空间复制数据</td>
+<td>不需要复制</td>
+</tr>
+<tr>
+<td>内存管理</td>
+<td>Java GC回收，创建和回收开销小</td>
+<td>通过调用<code>System.gc</code>释放掉Java对象引用的<code>DirectByteBuffer</code>内存空间，若Java对象长时间持有引用可能会导致<code>Native</code>内存泄漏，创建和回收开销很大</td>
+</tr>
+<tr>
+<td>使用场景</td>
+<td>并发连接数小于1000，I/O操作较少时比较合适</td>
+<td>数据量大，生命周期比较长的情况下比较合适</td>
+</tr>
+</tbody></table>
+<h3 id="4-NIO的数据访问方式"><a href="#4-NIO的数据访问方式" class="headerlink" title="4. NIO的数据访问方式"></a>4. NIO的数据访问方式</h3><p>NIO提供了比传统文件访问方式更好的方法：</p>
+<ul>
+<li><code>FileChannel.transferTo</code></li>
+<li><code>FileChannel.transferFrom</code></li>
+<li><code>FileChannel.map</code></li>
+</ul>
+<h4 id="1-FileChannel-transferXXX"><a href="#1-FileChannel-transferXXX" class="headerlink" title="1. FileChannel.transferXXX"></a>1. FileChannel.transferXXX</h4><p>FileChannel.TransferXXX与传统访问文件的方式相比可以减少数据从内核到用户空间的复制，数据直接在内核空间中移动。其允许我们将一个通道和另一个通道直接相连。</p>
+<p><img src="https://images.effiu.cn/blog/web/16.png" alt="传统数据访问方式"></p>
+<p><img src="https://images.effiu.cn/blog/web/17.png" alt="FileChannel.transferXXX的数据访问方式"></p>
+<h4 id="2-FileChannel-map"><a href="#2-FileChannel-map" class="headerlink" title="2. FileChannel.map"></a>2. FileChannel.map</h4><p><code>FileChannel.map</code>将文件按照一定大小块映射为内存区域，当程序访问内存区域时将直接操作这个文件数据，这种方式省去了从内核空间到用户空间复制的消耗，适合对大文件的只读性操作，其是和操作系统的底层I/O实现相关的。见<a href="https://www.effiu.cn/blog/2019/09/22/java/java_io/#6-内存映射文件" target="_blank">MapperedByteBuffer</a></p>
+<h2 id="3-I-O调优"><a href="#3-I-O调优" class="headerlink" title="3. I/O调优"></a>3. I/O调优</h2><h3 id="1-磁盘I-O优化"><a href="#1-磁盘I-O优化" class="headerlink" title="1. 磁盘I/O优化"></a>1. 磁盘I/O优化</h3><p>我们的应用程序通常需要访问磁盘来读取数据，而磁盘I/O非常耗时，所以我们需要判断I/O是否是一个瓶颈，有一些指标可以作为参考。</p>
+<h4 id="1-性能检测"><a href="#1-性能检测" class="headerlink" title="1. 性能检测"></a>1. 性能检测</h4><ol>
+<li><p>系统的I/O wait指标是否正常。例如：压测时，若测试机器油4个CPU，那么理想I/O wait参数应该不超过25%。若超过则很可能IO就是应用程序瓶颈。linux系统使用<code>iostat</code>命令查看。</p>
+ <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">[root@vdevops ~]# iostat</span><br><span class="line">Linux 3.10.0-957.27.2.el7.x86_64 (vdevops)      03/21/2020      _x86_64_        (1 CPU)</span><br><span class="line"></span><br><span class="line">avg-cpu:  %user   %nice %system %iowait  %steal   %idle</span><br><span class="line">           0.80    0.00    0.63    0.03    0.00   98.55</span><br><span class="line"></span><br><span class="line">Device:            tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn</span><br><span class="line">vda               0.61         0.92         4.65    7381229   37170360</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>IOPS</strong>，确认应用程序需要的最低IOPS，磁盘的IOPS能不能达到要求。**IOPS(Input/Output Operation Per Second)**用于计算存储设备(硬盘、固态硬盘或存储区域网络)性能的量测方式，可以视为每秒的读写次数。每个磁盘的IOPS通常在一个范围内，这和存储设备在磁盘上的数据块大小和访问方式有关，主要由磁盘转速决定，转速越高，IOPS越高。</p>
+</li>
+<li><p>目前为了提高I/O性能，通常采用一种叫做<strong>RAID</strong>的技术，就是将不同磁盘组合起来提高I/O性能。目前有多种<strong>RAID</strong>技术，每种技术对I/O性能的提升不同，可以用一个RAID因子代表，磁盘的读写吞吐量可以通过<code>iostat</code>命令获取，所以可以计算出一个理论的IOPS值：</p>
+<p> (磁盘数 * 每块磁盘的IOPS)/(磁盘的吞吐量 + RAID因子 * 磁盘读写的吞吐量) = IOPS</p>
+</li>
+</ol>
+<h4 id="2-提升I-O性能"><a href="#2-提升I-O性能" class="headerlink" title="2. 提升I/O性能"></a>2. 提升I/O性能</h4><p>通常提升磁盘I/O性能的方法有：</p>
+<ul>
+<li>增加缓存，减少磁盘访问次数</li>
+<li>优化磁盘的管理系统，设计最优的磁盘方式策略，以及磁盘的寻址策略，这是在底层操作系统层面考虑的</li>
+<li>设计合理的磁盘存储数据块，以及访问这些数据块的策略，这是在应用层面考虑的。例如：可以给存放的数据设计索引，通过寻址索引来加快和减少磁盘的访问量，还可以采用异步和非阻塞的方式加快磁盘的访问速度。</li>
+</ul>
+<p>RAID策略说明如下：</p>
+<table>
+<thead>
+<tr>
+<th>磁盘阵列</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RAID 0</td>
+<td>数据被平均写到多个磁盘中，写数据和读数据都是并行的，所以磁盘的IOPS可以提高一倍</td>
+</tr>
+<tr>
+<td>RAID 1</td>
+<td>RIAD 1的主要作用是可以提高数据的安全性，其将一份数据分别复制到多个磁盘阵列中，并不能提高IOPS，但是相同数据有多个备份。用于对数据安全要求高的场景中</td>
+</tr>
+<tr>
+<td>RAID 5</td>
+<td>是前面两种的折中方式，其将数据平均写到所有磁盘阵列总数减一的磁盘中，在另外一个磁盘中写入这份数据的奇偶校验信息，若其中一个磁盘损坏，可以通过其他磁盘的数据和这个数据的奇偶校验信息复来恢复这份数据</td>
+</tr>
+<tr>
+<td>RAID 0+1</td>
+<td>根据数据的备份情况进行分组，一份数据同时写到多个备份磁盘分组中，同时多个分组也会并行读写</td>
+</tr>
+</tbody></table>
+<h3 id="2-TCP网络参数调优"><a href="#2-TCP网络参数调优" class="headerlink" title="2. TCP网络参数调优"></a>2. TCP网络参数调优</h3><p>建立TCP连接，必须知道对方的IP和一个未被使用的端口号。然而一台主机的端口号是有限的，所以能够建立的连接也是有限的，还有一些端口号是受保护的(0~1024)。</p>
+<p>Linux中可以通过查看<code>/proc/sys/net/ipv4/ip_local_port_range</code>文件知道当前这个主机可以使用的端口范围。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[root@vdevops ~]# cat /proc/sys/net/ipv4/ip_local_port_range </span><br><span class="line">32768   60999</span><br></pre></td></tr></table></figure>
+
+<p>可使用端口号位32768~60999，共28231个。可分配的端口号，可以表示支持的最大连接数。若超过则会出现端口有限导致的大量请求等待建立连接。若发现大量TIME_WAIT，可以设置<code>/proc/sys/net/ipv4/tcp_fin_timeout</code>为更小的值来快速释放请求。</p>
+<p>除了设置TIME_WAIT快速释放连接之外，还可以让TCP连接复用等</p>
+<table>
+<thead>
+<tr>
+<th>网络参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>echo &quot;1024 65535&quot; &gt;/proc/sys/net/ip_local_port_range</code></td>
+<td>设置向外连接可用端口范围</td>
+</tr>
+<tr>
+<td><code>echo 1 &gt;/proc/sys/net/ipv4/tcp_tw_reuse</code></td>
+<td>设置<code>time_wait</code>连接复用</td>
+</tr>
+<tr>
+<td><code>echo 1&gt;/proc/sys/net/ipv4/tcp_tw_recycle</code></td>
+<td>设置快速回收<code>time_wait</code>连接</td>
+</tr>
+<tr>
+<td><code>echo 180000 &gt;/proc/sys/net/ipv4/tcp_max_tw_buckets</code></td>
+<td>设置最大<code>time_wait</code>连接长度</td>
+</tr>
+<tr>
+<td><code>echo 0 &gt;/proc/sys/net/ipv4/tcp_timestamp</code></td>
+<td>表示是否启用以一种比超时重发更精确的方法来启用超时RTT的计算</td>
+</tr>
+<tr>
+<td><code>echo 1 &gt;/proc/sys/net/ipv4/tcp_window_scaling</code></td>
+<td>设置TCP/IP会话的滑动窗口大小是否可变</td>
+</tr>
+<tr>
+<td><code>echo 20000 &gt;/proc/sys/net/ipv4/tcp_max_syn_backlong</code></td>
+<td>设置最大等待处于客户端还没有应答回来的连接数</td>
+</tr>
+<tr>
+<td><code>echo 20000 &gt;/proc/sys/net/core/somaxconn</code></td>
+<td>设置每个处于监听状态的端口的监听队列的长度</td>
+</tr>
+<tr>
+<td><code>echo 10000 &gt;/proc/sys/net/core/netdev_max_blcklog</code></td>
+<td>设置最大等待CPU处理的包的数目</td>
+</tr>
+<tr>
+<td><code>echo 2000000 &gt;/proc/sys/net/file-max</code></td>
+<td>设置最大打开文件数</td>
+</tr>
+<tr>
+<td><code>echo 15 &gt;/proc/sys/net/ipv4/tcp_fin_timeout</code></td>
+<td>设置FIN-WATI-2状态等待回收时间</td>
+</tr>
+<tr>
+<td><code>echo 16777216 &gt;/proc/sys/net/core/rmem_max</code></td>
+<td>设置最大的系统套接字数据接受缓冲大小</td>
+</tr>
+<tr>
+<td><code>echo 262144 &gt;/proc/sys/net/core/rmem_default</code></td>
+<td>设置默认的系统套接字数据接受缓冲大小</td>
+</tr>
+<tr>
+<td><code>echo 16777216 &gt;/proc/sys/net/core/wmem_max</code></td>
+<td>设置最大的系统套接字数据发送缓冲大小</td>
+</tr>
+<tr>
+<td><code>echo 262144 &gt;/proc/sys/net/wmem_default</code></td>
+<td>设置默认的系统套接字数据发送缓冲大小</td>
+</tr>
+<tr>
+<td><code>echo 4096 87380 16777216 &gt;/proc/sys/net/ipv4/tcp_rmem</code></td>
+<td>设置最大的TCP数据发送缓冲大小，分别是最小、默认和最大值</td>
+</tr>
+<tr>
+<td><code>echo 4096 65536 12777216 &gt;/proc/sys/net/ipv4/tcp_wmem</code></td>
+<td>设置最大的TCP数据接收缓冲大小，分别是最小、默认和最大值</td>
+</tr>
+</tbody></table>
+<p>上面的设置都是临时的，系统重启后就回丢失。另外linux还提供了一些工具可以查看当前TCP统计信息：、</p>
+<ul>
+<li><code>cat /proc/net/netstat</code>:查看TCP统计信息</li>
+<li><code>cat /proc/net/snmp</code>:查看当前系统的连接情况</li>
+<li><code>netstat -s</code>:查看网络的统计信息</li>
+</ul>
+<h3 id="3-网络I-O优化"><a href="#3-网络I-O优化" class="headerlink" title="3. 网络I/O优化"></a>3. 网络I/O优化</h3><p>网络I/O优化通常有一些基本原则：</p>
+<p><strong style='color:red'>减少网络交互的次数</strong>：减少网络交互次数通常需要在网络交互两端设置缓存。例如Oracle的jdbc驱动程序提供了对查询的SQL结果的缓存，客户端和数据库端都有，可以有效减少数据库的访问。另外还可以合并请求，如数据库查询时，合并查询参数。</p>
+<p><strong style='color:red'>减少网络传输数据量的大小</strong>：其办法通常是将数据压缩后在传输，如在HTTP请求中，Web服务器将请求的页面<strong>gzip</strong>压缩后在返回给浏览器，还可以设计简单的协议，尽量通过读取协议头来获取有用的价值信息。</p>
+<p><strong style='color:red'>尽量减少编码</strong>：网络I/O中的数据传输是以字节形式进行的，也就是通常需要序列化。但是要发送的数据都是字符形式的，字符到字节必须编码，尽量把编码过程放到发生网络IO前，即提前将字符转化为字节。</p>
+<p>交互场景主要包括同步与异步、阻塞与非阻塞方式。</p>
+<h4 id="1-同步与异步"><a href="#1-同步与异步" class="headerlink" title="1. 同步与异步"></a>1. 同步与异步</h4><p>同步是一个任务的完成需要依赖另一个任务时，只有等待被依赖的任务完成后，依赖的任务才能完成，这是一种可靠的任务序列。异步不需要等待被依赖的任务完成，只是通知被依赖的任务要完成什么工作，依赖的任务也立即执行，只要自己完成了整个任务就算完成了。被依赖的任务是否完成，依赖它的任务无法确定，是不可靠的任务序列。</p>
+<h4 id="2-阻塞与非阻塞"><a href="#2-阻塞与非阻塞" class="headerlink" title="2. 阻塞与非阻塞"></a>2. 阻塞与非阻塞</h4><p>阻塞与非阻塞主要是从CPU的消耗上来说的，阻塞就是CPU停下来等待一个慢的操作完成，CPU才会接着完成其他工作。非阻塞就是在这个慢的操作执行时，CPU会做其他工作，等待慢的任务完成。表面上看非阻塞提高了CPU的利用率，但是线程的切换次数增加了，增加的CPU使用时间能否补偿系统的切换成本需要确认。</p>
+<h4 id="3-两种方式的组合"><a href="#3-两种方式的组合" class="headerlink" title="3.两种方式的组合"></a>3.两种方式的组合</h4><p>同步阻塞、同步非阻塞、异步阻塞、异步非阻塞。4种方式都对IO性能有影响</p>
+<table>
+<thead>
+<tr>
+<th>组合方式</th>
+<th>性能分析</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>同步阻塞</td>
+<td>最常用、最简单的，但是IO性能差，CPU大部分时间处于空闲状态</td>
+</tr>
+<tr>
+<td>同步非阻塞</td>
+<td>提升I/O性能的常用手段，是将I/O的阻塞方式改成非阻塞，尤其在网络I/O长连接同时传输数据也不是很多的情况下，提升性能非常有效</td>
+</tr>
+<tr>
+<td>异步阻塞</td>
+<td>在分布式数据库中常用，写记录同步阻塞，主从同步是异步阻塞的。异步阻塞网络I/O能够提升效率。</td>
+</tr>
+<tr>
+<td>异步非阻塞</td>
+<td>非常负责，只有在复杂的分布式系统中使用，集群之间消息同步机制一班使用异步非阻塞。适合要传多份相同的数据到集群中不同的机器，同时数据量不大却很频繁的情况。可以使IO性能达到最高</td>
+</tr>
+</tbody></table>
+<h2 id="4-IO中的设计模式"><a href="#4-IO中的设计模式" class="headerlink" title="4. IO中的设计模式"></a>4. IO中的设计模式</h2><h3 id="1-适配器模式"><a href="#1-适配器模式" class="headerlink" title="1. 适配器模式"></a>1. 适配器模式</h3><p>适配器模式是把一个类的接口变换成客户端所能接受的另一种接口，保证可以被使用。常用在项目需要引用开源框架完成工作的情况中。</p>
+<p><img src="https://images.effiu.cn/blog/web/18.png" alt="适配器模式"></p>
+<ul>
+<li>Target(目标接口)：所要转换的所期待的接口</li>
+<li>Adaptee(源角色)：需要适配的接口</li>
+<li>Adater(适配器)：将源接口适配成目标接口，继承源接口，实现目标接口</li>
+</ul>
+<p>Java IO中有很多适配需求，将一个接口适配到另一个接口。例如：字符串数据转变成字节数据保存到文件中，将字节数据转变成流数据等。以<code>InputStreamReader</code>为例介绍适配器模式：</p>
+<p><code>InputStreamReader</code>继承了<code>Reader</code>接口，但是创建起对象必须在构造函数汇总传入<code>InputStream</code>实例，<code>InputStreamReader</code>的作用是将<code>InputStream</code>适配到<code>Reader</code>。</p>
+<p><img src="https://images.effiu.cn/blog/web/19.png" alt="InputStreamReader类结构图"></p>
+<p><code>InputStreamReader</code>实现了<code>Reader</code>接口，持有了<code>InputStream</code>实例。其他适配器模式例如：<code>StringReader</code>将一个<code>String</code>类适配到<code>Reader</code>接口。<code>ByteArrayInputStream</code>适配器将<code>byte</code>数组适配到<code>InputStream</code>流处理接口。</p>
+<h3 id="2-装饰器模式"><a href="#2-装饰器模式" class="headerlink" title="2. 装饰器模式"></a>2. 装饰器模式</h3><p>顾名思义，将类装饰一下，使其更加强大，但是对类的使用者是透明的，否则会破坏原有类的结构。</p>
+<p><img src="https://images.effiu.cn/blog/web/21.png" alt="装饰器模式的结构图"></p>
+<ul>
+<li>Component：抽象组件角色，定义一组抽象接口，规则被装饰组建的功能</li>
+<li>ConcreteComponent：实现抽象组件的所有功能</li>
+<li>Decorator：装饰器，持有一个Component对象的实例，定义一个与抽象组件一致的接口</li>
+<li>ConcreteDecorator：具体的装饰器实现着，负责实现装饰器角色定义的功能。</li>
+</ul>
+<p>装饰器模式的作用是赋予被装饰得类更多的功能，在Java IO类库中有很多不同的功能组合情况，都是使用装饰者模式实现的，下面以<code>FilterInputStream</code>为例说明：</p>
+<p><img src="https://images.effiu.cn/blog/web/20.png" alt="FilterInputStream类结构图"></p>
+<p><code>InputStream</code>类是以抽象组件存在的；而<code>FileInputStream</code>是具体的组件，其实现了抽象组件的所有接口；<code>FilterInputStream</code>是装饰角色，实现了<code>InputStream</code>类的所有接口，持有<code>InputStream</code>的对象实例的引用。<code>BufferedInputStream</code>是具体的装饰器实现着，其给<code>InputStream</code>附加了功能，这个装饰器的作用是使得<code>InputStream</code>读取的数据保存在内存中，而提高读取性能。</p>
+<p>其他装饰器模式还有<code>LineNumberInputStream</code>类，作用是提高按行读取数据的功能。</p>
+<h3 id="3-适配器与装饰器区别"><a href="#3-适配器与装饰器区别" class="headerlink" title="3. 适配器与装饰器区别"></a>3. 适配器与装饰器区别</h3><p>装饰器和适配器都是包装模式。适配器是将一个接口转变成另外一个接口，目的是改变接口达到充分使用的目的；装饰器模式要保持原有接口，增强原有对象的功能，或者改变原有对象的处理方法提升性能。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/java-web/" rel="tag"># java web</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/03/21/java/lambda/" rel="prev" title="Java 8 函数式编程">
+      <i class="fa fa-chevron-left"></i> Java 8 函数式编程
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/blog/2020/03/26/web/3-Java-Web%E4%B8%AD%E6%96%87%E7%BC%96%E7%A0%81/" rel="next" title="Java Web中文编码">
+      Java Web中文编码 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+        </div>
+        
+    <div class="comments" id="valine-comments"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="http://www.beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18062655号 </a>
+      <img src="https://images.effiu.cn/gongan.png" style="display: inline-block;">
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">effiu</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">549k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">8:19</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/blog/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+
+<script>
+NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/valine@1/dist/Valine.min.js', () => {
+    new Valine(Object.assign({
+      el  : '#valine-comments',
+      path: location.pathname,
+    }, {"enable":true,"appId":"Jw6tthQmGwY5Sc2OlYBjIePr-gzGzoHsz","appKey":"CjWG9xugjMIBiCz8MsGnH9WI","placeholder":"Just go go","avatar":"mm","meta":["nick","mail","link"],"pageSize":10,"language":null,"visitor":true,"comment_count":false,"recordIP":false,"serverURLs":null}
+    ));
+  }, window.Valine);
+});
+</script>
+
+</body>
+</html>
