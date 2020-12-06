@@ -228,7 +228,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/blog/archives/">
         
-          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-count">87</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -273,6 +273,213 @@
 
         <div class="content index posts-expand">
           
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/23/redis/5_limiting/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/blog/2019/08/23/redis/5_limiting/" class="post-title-link" itemprop="url">Redis 限流算法</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-23 16:44 16:44:00" itemprop="dateCreated datePublished" datetime="2019-08-23T16:44:00+08:00">2019-08-23 16:44</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-23 16:45 16:45:00" itemprop="dateModified" datetime="2019-08-23T16:45:00+08:00">2019-08-23 16:45</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/23/redis/5_limiting/" class="post-meta-item leancloud_visitors" data-flag-title="Redis 限流算法" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>限流算法在分布式领域是一个很重要的知识点，当系统处理能力有限时，如何阻止计划外的请求继续对系统施压，非常重要。限流除了控制流量还被用于控制用户行为，避免垃圾请求。例如，控制用户的发帖、回复、点赞等行为，一般是限制用户某种行为在规定时间内允许的次数，超过次数就是非法行为。</p>
+<ul>
+<li>滑窗限流</li>
+<li>漏斗限流</li>
+</ul>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/blog/2019/08/23/redis/5_limiting/#more" rel="contents">
+                Read more &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/22/redis/4_hyperloglog_bloom_filter/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.jpg">
+      <meta itemprop="name" content="effiu">
+      <meta itemprop="description" content="effiu的博客">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="effiu's blog">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/" class="post-title-link" itemprop="url">Redis HyperLogLog和布隆过滤器</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2019-08-22 17:49 17:49:00" itemprop="dateCreated datePublished" datetime="2019-08-22T17:49:00+08:00">2019-08-22 17:49</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2019-08-22 21:53 21:53:32" itemprop="dateModified" datetime="2019-08-22T21:53:32+08:00">2019-08-22 21:53</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/blog/categories/redis/" itemprop="url" rel="index"><span itemprop="name">redis</span></a>
+                </span>
+            </span>
+
+          
+            <span id="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/" class="post-meta-item leancloud_visitors" data-flag-title="Redis HyperLogLog和布隆过滤器" title="Views">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span class="leancloud-visitors-count"></span>
+            </span>
+  
+  
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">Reading time &asymp;</span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>若需要统计网站网页的UV和PV数据，如何实现呢？</p>
+<p>PV我们需要给每个网页加一个独立的Redis计数器就可以，Key为网页+日期组成。</p>
+<p>UV则需要去重，一个用户一天无论请求多少次都只计算一次，这就要求每个网页请求都要带上用户唯一标识，最简单的方法使用<code>set</code>集合存储当天所有访问过此页面的用户Id。<code>sadd</code>统计用户标识，<code>scard</code>可以取出集合大小。但是当访问量大时，比如几千万的UV，那就就需要很大的set集合统计，浪费空间。若页面非常多，所需要的存储空间非常大。</p>
+<p>Redis提供了<code>HyperLogLog</code>数据结构就是用来解决这种统计问题的。<code>HyperLogLog</code>提供不精确的去重计数方案，其标准误差是<code>0.81%</code>，这样的精确度已经完全满足UV统计需求了。<code>HyperLogLog</code>是Redis的高级数据结构，非常有用，<font color='red'><code>HyperLogLog</code>数据结构来进行估数，它非常有价值，可以解决很多精确度不高的统计需求</font>。</p>
+<p>但是我们无法知道<code>HyperLogLog</code>数据结构内是否存在某个值，因为其为提供相关方法。若有个需要判断值是否在Redis中存在的业务场景，如何处理呢？例如：新闻客户端中，每次推荐都要去掉那些已经看过的内容，新闻客户端如何去重呢？</p>
+<ul>
+<li>服务端有统计用户访问记录，直接从用户历史记录中进行筛选，当用户量大，新闻又多的情况下，性能会很差。需要频繁的在数据库中进行<code>exists</code>操作。</li>
+<li>缓存，将历史记录缓存起来，这回浪费很大的存储空间，且存储空间会随着时间线性增长</li>
+<li><strong>布隆过滤器</strong>(Bloom Filter)，专门用来解决去重问题，且还会节省90%以上的空间，但存在误判的情况。</li>
+</ul>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/blog/2019/08/22/redis/4_hyperloglog_bloom_filter/#more" rel="contents">
+                Read more &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
       
   
   
@@ -1093,189 +1300,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
-    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/08/06/jvm/9_classloader_case/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/blog/images/avatar.jpg">
-      <meta itemprop="name" content="effiu">
-      <meta itemprop="description" content="effiu的博客">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="effiu's blog">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/blog/2019/08/06/jvm/9_classloader_case/" class="post-title-link" itemprop="url">类加载与执行子系统案例</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2019-08-06 00:08 00:08:00 / Modified: 00:08:45" itemprop="dateCreated datePublished" datetime="2019-08-06T00:08:00+08:00">2019-08-06 00:08</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
-                </span>
-            </span>
-
-          
-            <span id="/blog/2019/08/06/jvm/9_classloader_case/" class="post-meta-item leancloud_visitors" data-flag-title="类加载与执行子系统案例" title="Views">
-              <span class="post-meta-item-icon">
-                <i class="fa fa-eye"></i>
-              </span>
-              <span class="post-meta-item-text">Views: </span>
-              <span class="leancloud-visitors-count"></span>
-            </span>
-  
-  
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-                <span class="post-meta-item-text">Reading time &asymp;</span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>在Class文件格式与执行引擎这部分中，用户能直接影响的内容并不太多，Class文件以何种形式存储，类型何时加载、如何连接，以及虚拟机如何执行字节码指令等都是由虚拟机直接控制的行为，用户无法改变。用户能通过程序操作的，主要是字节码生成与类加载器这两部分。</p>
-<p>下面是4个关于类加载与执行子系统的案例。</p>
-          <!--noindex-->
-            <div class="post-button">
-              <a class="btn" href="/blog/2019/08/06/jvm/9_classloader_case/#more" rel="contents">
-                Read more &raquo;
-              </a>
-            </div>
-          <!--/noindex-->
-        
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
-    <link itemprop="mainEntityOfPage" href="https://www.effiu.cn/2019/07/28/jvm/8_vm_bytecode_execution_engine/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/blog/images/avatar.jpg">
-      <meta itemprop="name" content="effiu">
-      <meta itemprop="description" content="effiu的博客">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="effiu's blog">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/blog/2019/07/28/jvm/8_vm_bytecode_execution_engine/" class="post-title-link" itemprop="url">虚拟机字节码执行引擎</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2019-07-28 18:01 18:01:00 / Modified: 18:01:33" itemprop="dateCreated datePublished" datetime="2019-07-28T18:01:00+08:00">2019-07-28 18:01</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/blog/categories/jvm/" itemprop="url" rel="index"><span itemprop="name">jvm</span></a>
-                </span>
-            </span>
-
-          
-            <span id="/blog/2019/07/28/jvm/8_vm_bytecode_execution_engine/" class="post-meta-item leancloud_visitors" data-flag-title="虚拟机字节码执行引擎" title="Views">
-              <span class="post-meta-item-icon">
-                <i class="fa fa-eye"></i>
-              </span>
-              <span class="post-meta-item-text">Views: </span>
-              <span class="leancloud-visitors-count"></span>
-            </span>
-  
-  
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-                <span class="post-meta-item-text">Reading time &asymp;</span>
-              <span>14 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>分析了虚拟机在执行代码时，如何找到正确的方法、如何执行方法内的字节码，以及执行代码时涉及的内存结构。</p>
-          <!--noindex-->
-            <div class="post-button">
-              <a class="btn" href="/blog/2019/07/28/jvm/8_vm_bytecode_execution_engine/#more" rel="contents">
-                Read more &raquo;
-              </a>
-            </div>
-          <!--/noindex-->
-        
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1333,12 +1357,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">549k</span>
+    <span title="Symbols count total">614k</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">8:19</span>
+    <span title="Reading time total">9:18</span>
 </div>
 
         
